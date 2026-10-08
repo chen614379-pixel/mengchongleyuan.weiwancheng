@@ -1,0 +1,14 @@
+{
+  "name": "petbrawl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "萌宠乱斗 · 林间乱斗 —— 微信小游戏（横屏 1280x720）",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -w -p tsconfig.json",
+    "headless": "node tools/headless.js"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3"
+  }
+}

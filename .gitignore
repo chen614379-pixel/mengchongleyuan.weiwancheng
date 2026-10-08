@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# build scratch / QA scratch (kept out of both git and the minigame package)
+work/
+tools/__pycache__/
+__pycache__/
+*.pyc
+
+# local preview helper state
+.weixin-minigame-helper/
+.dev/
+
+# editor / OS noise
+.DS_Store
+Thumbs.db
+*.log
