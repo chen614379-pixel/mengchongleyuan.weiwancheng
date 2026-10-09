@@ -104,6 +104,18 @@
       {
         "value": "project.private.config.json",
         "type": "file"
+      },
+      {
+        "value": ".git",
+        "type": "folder"
+      },
+      {
+        "value": ".gitignore",
+        "type": "file"
+      },
+      {
+        "value": ".gitattributes",
+        "type": "file"
       }
     ],
     "include": []

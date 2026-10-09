@@ -12,7 +12,7 @@ import {
   settingsRect, shelfAt, shelfRect, sunCoinRect, warbookRect, MARKET
 } from './match-layout';
 import { LAYOUT, anchorToPixel } from '../config/layout';
-import { PALETTE, rgba } from '../config/palette';
+import { PALETTE, rgba, tint } from '../config/palette';
 import { TIMING } from '../config/timing';
 import { SPECIES, SpeciesId } from '../config/species';
 import { buffDef } from '../config/cards';
@@ -54,8 +54,8 @@ import {
 import {
   drawButton, drawGear, drawIconButton, drawSunCoin, drawTipBubble, drawToast, drawWoodPanel
 } from '../render/ui';
-import { drawGrassTuft } from '../render/paint';
-import { fillWatercolor, roundedRectPoints, strokeInk } from '../ui/brush';
+import { drawBroadleafTree, drawBush, drawGrassTuft } from '../render/paint';
+import { fillWatercolor, noiseAt, roundedRectPoints, strokeInk, P } from '../ui/brush';
 
 /** 结算页伤害堆叠条的矩形（绘制与点击判定共用，改一处即同步）。 */
 const DAMAGE_STACK = { x: 365, y: 344, w: 370, h: 190 };
@@ -895,6 +895,51 @@ class MatchScene implements Scene {
     return null;
   }
 
+  /**
+   * 盖住底板两侧烘焙的「镜像补边」条纹。
+   *
+   * 战场/布阵底板两侧的条纹是旧管线把镜像补边烘进图里留下的，1280 基准下正好压在
+   * 代码画的侧栏木框后面，宽屏（padX>0）侧栏外移后就会露出来。这里用底板自身最外侧
+   * 的 AI 森林（阔图多出来的 192px）横向拉伸铺满那两条，并把靠画面中央的一侧按 10 级
+   * alpha 羽化，边界不会出现硬直边，读起来仍是连续树林。
+   */
+  private hideBakedSideBands(ctx: CanvasRenderingContext2D, plate: any, t: number): void {
+    if (!plate) return;
+    const box = sceneBox();
+    const H = LAYOUT.SCREEN_H;
+    const iw = plate.width || 1664;
+    const band = Math.min(192, Math.round(iw * 0.115));
+    const leftEnd = 292;
+    const rightStart = 988;
+    if (leftEnd - box.x > 0) {
+      this.drawBandSlices(ctx, plate, 0, band, box.x, leftEnd - box.x, H, 1);
+    }
+    const rw = box.x + box.w - rightStart;
+    if (rw > 0) {
+      this.drawBandSlices(ctx, plate, iw - band, band, rightStart, rw, H, -1);
+    }
+  }
+
+  /** 把一段森林原画按 10 级 alpha 铺开：外缘不透明，靠画面中央的一侧逐渐淡出。 */
+  private drawBandSlices(
+    ctx: CanvasRenderingContext2D, img: any, sx: number, sw: number,
+    dx: number, dw: number, dh: number, dir: number
+  ): void {
+    const N = 12;
+    ctx.save();
+    for (let i = 0; i < N; i++) {
+      const t0 = i / N;
+      const t1 = (i + 1) / N;
+      const w = dw * (t1 - t0);
+      const x = dir > 0 ? dx + dw * t0 : dx + dw * (1 - t1);
+      // 前 70% 完全盖住条纹，最后 30% 才淡出，和底板草甸接上
+      ctx.globalAlpha = i < 7 ? 1 : [0.74, 0.5, 0.32, 0.18, 0.1][i - 7];
+      ctx.drawImage(img, sx + sw * t0, 0, sw * (t1 - t0), img.height || 720, x, 0, w + 1, dh);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   private highlightAt(x: number, y: number): number {
     const pages = this.buildReport();
     const items = pages[2].highlights || [];
@@ -950,6 +995,12 @@ class MatchScene implements Scene {
       ctx.translate(box.x, box.y);
       drawForestLayer(ctx, box.w, box.h, 0, 'near', renderTime);
       ctx.restore();
+    }
+    // 旧战场/布阵底板的两侧烘死了「镜像补边」条纹（从美术图裁出来时就带上了）：
+    // 1280 基准下它们正好压在代码画的侧栏木框之后，宽屏把侧栏推到屏幕两边后就会露出来。
+    // 这里用同一套程序化森林按不规则水彩轮廓盖住那两条，和底板中央的草甸自然相接。
+    if (plate && plate !== marketPlate && plate !== resultPlate) {
+      this.hideBakedSideBands(ctx, plate, renderTime);
     }
     // 统一色grading：一层薄薄的深绿 + 顶部暖光，抵消水彩层的低饱和（不覆盖单位）
     if (!plate) {

@@ -900,6 +900,47 @@ var MatchScene = /** @class */ (function () {
         }
         return null;
     };
+    /**
+     * 盖住底板两侧烘焙的「镜像补边」条纹。
+     *
+     * 战场/布阵底板两侧的条纹是旧管线把镜像补边烘进图里留下的，1280 基准下正好压在
+     * 代码画的侧栏木框后面，宽屏（padX>0）侧栏外移后就会露出来。这里用底板自身最外侧
+     * 的 AI 森林（阔图多出来的 192px）横向拉伸铺满那两条，并把靠画面中央的一侧按 10 级
+     * alpha 羽化，边界不会出现硬直边，读起来仍是连续树林。
+     */
+    MatchScene.prototype.hideBakedSideBands = function (ctx, plate, t) {
+        if (!plate)
+            return;
+        var box = (0, screen_1.sceneBox)();
+        var H = layout_1.LAYOUT.SCREEN_H;
+        var iw = plate.width || 1664;
+        var band = Math.min(192, Math.round(iw * 0.115));
+        var leftEnd = 292;
+        var rightStart = 988;
+        if (leftEnd - box.x > 0) {
+            this.drawBandSlices(ctx, plate, 0, band, box.x, leftEnd - box.x, H, 1);
+        }
+        var rw = box.x + box.w - rightStart;
+        if (rw > 0) {
+            this.drawBandSlices(ctx, plate, iw - band, band, rightStart, rw, H, -1);
+        }
+    };
+    /** 把一段森林原画按 10 级 alpha 铺开：外缘不透明，靠画面中央的一侧逐渐淡出。 */
+    MatchScene.prototype.drawBandSlices = function (ctx, img, sx, sw, dx, dw, dh, dir) {
+        var N = 12;
+        ctx.save();
+        for (var i = 0; i < N; i++) {
+            var t0 = i / N;
+            var t1 = (i + 1) / N;
+            var w = dw * (t1 - t0);
+            var x = dir > 0 ? dx + dw * t0 : dx + dw * (1 - t1);
+            // 前 70% 完全盖住条纹，最后 30% 才淡出，和底板草甸接上
+            ctx.globalAlpha = i < 7 ? 1 : [0.74, 0.5, 0.32, 0.18, 0.1][i - 7];
+            ctx.drawImage(img, sx + sw * t0, 0, sw * (t1 - t0), img.height || 720, x, 0, w + 1, dh);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    };
     MatchScene.prototype.highlightAt = function (x, y) {
         var pages = this.buildReport();
         var items = pages[2].highlights || [];
@@ -949,6 +990,12 @@ var MatchScene = /** @class */ (function () {
             ctx.translate(box.x, box.y);
             (0, forest_1.drawForestLayer)(ctx, box.w, box.h, 0, 'near', renderTime);
             ctx.restore();
+        }
+        // 旧战场/布阵底板的两侧烘死了「镜像补边」条纹（从美术图裁出来时就带上了）：
+        // 1280 基准下它们正好压在代码画的侧栏木框之后，宽屏把侧栏推到屏幕两边后就会露出来。
+        // 这里用同一套程序化森林按不规则水彩轮廓盖住那两条，和底板中央的草甸自然相接。
+        if (plate && plate !== marketPlate && plate !== resultPlate) {
+            this.hideBakedSideBands(ctx, plate, renderTime);
         }
         // 统一色grading：一层薄薄的深绿 + 顶部暖光，抵消水彩层的低饱和（不覆盖单位）
         if (!plate) {
