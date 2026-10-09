@@ -5,7 +5,10 @@
  *   逻辑可视区 = 1280×720 按屏幕宽高比「等比外扩」得到（更宽的屏左右变宽、更窄的屏上下变高），
  *   缩放 scale = cssW / logicalW（等比，永远不变形，也永远不裁切）。
  *   场景代码仍然使用 0..1280 / 0..720 的坐标，画布变换里统一平移 padX / padY 使内容保持居中；
- *   留边区域由「全屏底色 + 底板边缘条拉伸」补满（见 sceneBox / drawPlateCover）。
+ *   留边区域由「阔图底板」补满：底板宽 1664×720，中央 1280×720 与设计基准逐像素对齐，
+ *   左右多出的 192px 是 AI 续画的同一张风景（见 drawPlateCover）。
+ *   渲染时底板**永远 1:1 居中**（scale 恒为 1），所以烘焙进底图的招牌/卡位/货币位
+ *   与代码里的命中区始终重合；只有屏幕比阔图还宽/还高时，才用镜像边缘条补最外圈。
  *   这样既没有黑边，又不会让烘焙在底板里的元素与命中区错位。
  */
 import { WX, HAS_WX } from './wx-shim';
@@ -133,44 +136,55 @@ export function sceneCorners(): { x: number; y: number }[] {
  */
 export function drawPlateCover(ctx: any, img: any, x: number, y: number, w: number, h: number): void {
   if (!img) return;
-  const v = viewport;
-  if (v.padX <= 0 && v.padY <= 0) {
-    ctx.drawImage(img, x, y, w, h);
-    return;
-  }
+  const box = sceneBox();
   const iw = img.width || w;
   const ih = img.height || h;
-  // 边缘条尽量取窄（约 1.2%）：既能保证接缝连续，又不会把边缘处的木牌/齿轮等烘焙物件拉成怪影
-  const sx = Math.max(1, Math.round(iw * 0.012));
-  const sy = Math.max(1, Math.round(ih * 0.012));
-  // 关键：每一条留边都用「镜像边缘条」补，并且让边缘条的第一列正好落在画面接缝上，
-  // 这样接缝处的像素是连续的（不会出现一条硬边），只是往外略微拉伸。
-  const ph = h + v.padY * 2;
-  if (v.padY > 0) {
+  // 1:1 居中：底板中央的 1280×720 与设计基准严格对齐（宽屏时多出来的正是 AI 阔图）
+  const dx = x + w / 2 - iw / 2;
+  const dy = y + h / 2 - ih / 2;
+  const top = dy - box.y;
+  const bottom = box.y + box.h - (dy + ih);
+  const left = dx - box.x;
+  const right = box.x + box.w - (dx + iw);
+  if (top > 0 || bottom > 0 || left > 0 || right > 0) {
+    // 极窄/极宽比例（如 4:3 平板）下阔图也不够铺时，用镜像边缘条补最外圈：
+    // 取图内约 1.2% 的窄条翻转铺出去，接缝处像素连续，不会出现硬边或留白。
+    const sx = Math.max(1, Math.round(iw * 0.012));
+    const sy = Math.max(1, Math.round(ih * 0.012));
+    const fullH = box.h;
+    const fullW = box.w;
     ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(1, -1);
-    ctx.drawImage(img, 0, 0, iw, sy, 0, 0, w, v.padY);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(x, y + h);
-    ctx.scale(1, -1);
-    ctx.drawImage(img, 0, ih - sy, iw, sy, 0, -v.padY, w, v.padY);
+    if (top > 0) {
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.scale(1, -1);
+      ctx.drawImage(img, 0, 0, iw, sy, 0, 0, iw, top);
+      ctx.restore();
+    }
+    if (bottom > 0) {
+      ctx.save();
+      ctx.translate(dx, dy + ih);
+      ctx.scale(1, -1);
+      ctx.drawImage(img, 0, ih - sy, iw, sy, 0, -bottom, iw, bottom);
+      ctx.restore();
+    }
+    if (left > 0) {
+      ctx.save();
+      ctx.translate(box.x, dy - Math.max(0, top));
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0, sx, ih, 0, 0, left, fullH);
+      ctx.restore();
+    }
+    if (right > 0) {
+      ctx.save();
+      ctx.translate(dx + iw, dy - Math.max(0, top));
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, iw - sx, 0, sx, ih, -right, 0, right, fullH);
+      ctx.restore();
+    }
     ctx.restore();
   }
-  if (v.padX > 0) {
-    ctx.save();
-    ctx.translate(x, y - v.padY);
-    ctx.scale(-1, 1);
-    ctx.drawImage(img, 0, 0, sx, ih, 0, 0, v.padX, ph);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(x + w, y - v.padY);
-    ctx.scale(-1, 1);
-    ctx.drawImage(img, iw - sx, 0, sx, ih, -v.padX, 0, v.padX, ph);
-    ctx.restore();
-  }
-  ctx.drawImage(img, x, y, w, h);
+  ctx.drawImage(img, dx, dy, iw, ih);
 }
 
 /** 每帧开头：铺满整屏底色，再把坐标系变换到逻辑可视区（0..1280 保持在屏幕中央）。 */

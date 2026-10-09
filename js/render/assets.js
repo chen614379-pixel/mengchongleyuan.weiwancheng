@@ -36,16 +36,19 @@ function units() {
     var out = [];
     for (var i = 0; i < CARD_NAMES.length; i++) {
         var n = CARD_NAMES[i];
-        out.push({ name: 'unit-' + n, path: 'assets/pets/' + n + '.png', w: 320, h: 320, kind: 'unit' });
+        out.push({ name: 'unit-' + n, path: 'assets/pets/' + n + '.png', w: 256, h: 256, kind: 'unit' });
     }
     return out;
 }
 var SCENES = [
-    { name: 'bg-camp', path: 'assets/bg/bg-camp.jpg', w: 1280, h: 720, kind: 'bg' },
-    { name: 'bg-board-plain', path: 'assets/bg/bg-board-plain.jpg', w: 1280, h: 720, kind: 'bg' },
-    { name: 'ui-market', path: 'assets/bg/ui-market.jpg', w: 1280, h: 720, kind: 'ui' },
-    { name: 'ui-deploy-fog', path: 'assets/bg/ui-deploy-fog.jpg', w: 1280, h: 720, kind: 'ui' },
-    { name: 'ui-result-victory', path: 'assets/bg/ui-result-victory.jpg', w: 1280, h: 720, kind: 'ui' }
+    // 阔图底板（1664×720）：中央 1280×720 与旧底板逐像素一致，所以命中区、
+    // 烘焙招牌、集市卡位都不用改；左右各 192px 是 AI 续画的森林，供宽屏铺满
+    // （见 platform/screen.ts drawPlateCover 的 cover 铺法）。
+    { name: 'bg-camp', path: 'assets/bg/bg-camp-wide.jpg', w: 1664, h: 720, kind: 'bg' },
+    { name: 'bg-board-plain', path: 'assets/bg/bg-board-plain-wide.jpg', w: 1664, h: 720, kind: 'bg' },
+    { name: 'ui-market', path: 'assets/bg/ui-market-wide.jpg', w: 1664, h: 720, kind: 'ui' },
+    { name: 'ui-deploy-fog', path: 'assets/bg/ui-deploy-fog-wide.jpg', w: 1664, h: 720, kind: 'ui' },
+    { name: 'ui-result-victory', path: 'assets/bg/ui-result-victory-wide.jpg', w: 1664, h: 720, kind: 'ui' }
 ];
 /** 全部资源表。路径相对小游戏包根目录。 */
 exports.ASSET_LIST = SCENES.concat(cards(), units());
