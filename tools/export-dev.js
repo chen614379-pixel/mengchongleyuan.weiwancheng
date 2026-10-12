@@ -65,4 +65,28 @@ console.log('  bytes: ' + total + ' (limit 4194304, headroom ' + (4194304 - tota
 console.log('  game.js: ' + fs.existsSync(path.join(DEST, 'game.js')));
 console.log('  game.json: ' + fs.existsSync(path.join(DEST, 'game.json')));
 console.log('  assets referenced: ' + real.length + ', missing: ' + missing.length + (missing.length ? ' -> ' + missing.join(', ') : ''));
-process.exit(missing.length ? 1 : 0);
+
+// 真机调试/上传前必须确认：这个导出目录是刚生成的，不是上次的陈旧副本。
+// 曾发生过导入旧导出目录导致 80051（包里还留着 mp3 化之前的 wav）。
+if (total > 4194304) {
+  console.log('');
+  console.log('  !! 超出主包上限 4MB：' + total + ' > 4194304，真机调试会报 80051');
+}
+const staleWav = [];
+(function findWav(dir) {
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (fs.statSync(p).isDirectory()) findWav(p);
+    else if (/\.wav$/i.test(name)) staleWav.push(path.relative(DEST, p));
+  }
+})(DEST);
+if (staleWav.length) {
+  console.log('');
+  console.log('  !! 资源里仍有未压缩 wav（' + staleWav.length + ' 个），请跑 tools/convert_audio.py');
+  console.log('     ' + staleWav.slice(0, 3).join(', ') + (staleWav.length > 3 ? ' ...' : ''));
+}
+console.log('');
+console.log('  提示：在微信开发者工具里导入的必须是上面这个 DEST 目录；');
+console.log('        每次改完代码先重跑本脚本，再重新导入，避免用到陈旧副本。');
+
+process.exit(missing.length || total > 4194304 ? 1 : 0);

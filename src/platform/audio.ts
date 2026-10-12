@@ -1,30 +1,33 @@
 /**
  * 音频：优先使用小程序音频接口，浏览器/预览环境回落到 <audio> 元素。
  * 音频文件缺失时静默降级（不抛错、不阻塞）；音效名 → 路径表集中在此。
- * 资源：assets/sfx/*.wav（15 个音效）、assets/bgm/forest-loop.wav（6 秒无缝循环）。
+ * 资源：assets/sfx/*.mp3（15 个音效）、assets/bgm/forest-loop.mp3（6 秒无缝循环）。
+ * 注意：必须用 MP3 而非 WAV。WAV 未压缩，16 个文件占 6.6MB，主包上限仅 4MB
+ * （真机调试曾报 80051）。转 MP3 后合计 505KB，约 13 倍压缩。
+ * 重新生成见 tools/convert_audio.py。
  */
 import { WX, HAS_WX } from './wx-shim';
 import { loadSave } from './storage';
 
 const SFX_TABLE: { name: string; path: string }[] = [
-  { name: 'tap', path: 'assets/sfx/tap.wav' },
-  { name: 'cardPick', path: 'assets/sfx/card-buy.wav' },
-  { name: 'cardFly', path: 'assets/sfx/card-fly.wav' },
-  { name: 'land', path: 'assets/sfx/land.wav' },
-  { name: 'reject', path: 'assets/sfx/reject.wav' },
-  { name: 'combine', path: 'assets/sfx/combine.wav' },
-  { name: 'attack', path: 'assets/sfx/attack.wav' },
-  { name: 'hit', path: 'assets/sfx/hit.wav' },
-  { name: 'death', path: 'assets/sfx/death.wav' },
-  { name: 'command', path: 'assets/sfx/command.wav' },
-  { name: 'roundWin', path: 'assets/sfx/round-win.wav' },
-  { name: 'roundLose', path: 'assets/sfx/round-lose.wav' },
-  { name: 'victory', path: 'assets/sfx/victory.wav' },
-  { name: 'defeat', path: 'assets/sfx/defeat.wav' },
-  { name: 'refresh', path: 'assets/sfx/refresh.wav' }
+  { name: 'tap', path: 'assets/sfx/tap.mp3' },
+  { name: 'cardPick', path: 'assets/sfx/card-buy.mp3' },
+  { name: 'cardFly', path: 'assets/sfx/card-fly.mp3' },
+  { name: 'land', path: 'assets/sfx/land.mp3' },
+  { name: 'reject', path: 'assets/sfx/reject.mp3' },
+  { name: 'combine', path: 'assets/sfx/combine.mp3' },
+  { name: 'attack', path: 'assets/sfx/attack.mp3' },
+  { name: 'hit', path: 'assets/sfx/hit.mp3' },
+  { name: 'death', path: 'assets/sfx/death.mp3' },
+  { name: 'command', path: 'assets/sfx/command.mp3' },
+  { name: 'roundWin', path: 'assets/sfx/round-win.mp3' },
+  { name: 'roundLose', path: 'assets/sfx/round-lose.mp3' },
+  { name: 'victory', path: 'assets/sfx/victory.mp3' },
+  { name: 'defeat', path: 'assets/sfx/defeat.mp3' },
+  { name: 'refresh', path: 'assets/sfx/refresh.mp3' }
 ];
 
-const BGM_PATH = 'assets/bgm/forest-loop.wav';
+const BGM_PATH = 'assets/bgm/forest-loop.mp3';
 
 const pool: { [name: string]: any[] } = {};
 let inited = false;
