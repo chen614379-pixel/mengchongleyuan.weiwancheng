@@ -11,6 +11,7 @@ import { devSeedSave } from './platform/storage';
 import { resetStack, tickScene, renderScene, gestureScene, push, swapNow, isTransitioning, Scene } from './scene/manager';
 import { BootScene } from './scene/boot';
 import { CampScene } from './scene/camp';
+import { Camp2Scene } from './scene/camp2';
 import { createMatchScene } from './scene/match';
 import { createDeckScene } from './scene/deck';
 import { createCollectionScene } from './scene/collection';
@@ -23,7 +24,7 @@ import { createShopScene } from './scene/shop';
  *   'match'     → 直接进对局，走 dev 脚本自动布阵/推进（核对布阵/战斗/集市/结算）
  *   'cycle'     → 每 4 秒换一个界面：卡组 → 图鉴 → 段位 → 商店 → 设置 → 营地
  */
-const DEV_ENTRY: string | null = null;
+const DEV_ENTRY: string | null = 'camp2';
 
 let devStep = 0;
 let devStepAt = 0;
@@ -31,7 +32,6 @@ let devStarted = false;
 let renderedOnce = false;
 let renderFailed = false;
 let tickFailed = false;
-let probedOnce = false;
 const DEV_CYCLE: { make: () => Scene }[] = [
   { make: () => createDeckScene() },
   { make: () => createCollectionScene() },
@@ -42,6 +42,17 @@ const DEV_CYCLE: { make: () => Scene }[] = [
 
 function makeCamp(): CampScene {
   return new CampScene({
+    onStartMatch: () => push(createMatchScene()),
+    onOpenDeck: () => push(createDeckScene()),
+    onOpenCollection: () => push(createCollectionScene()),
+    onOpenShop: () => push(createShopScene()),
+    onOpenRank: () => push(createCollectionScene({ tab: 'rank' })),
+    onOpenSettings: () => push(createSettingsScene())
+  });
+}
+
+function makeCamp2(): Camp2Scene {
+  return new Camp2Scene({
     onStartMatch: () => push(createMatchScene()),
     onOpenDeck: () => push(createDeckScene()),
     onOpenCollection: () => push(createCollectionScene()),
@@ -84,7 +95,9 @@ function boot(): void {
   onGesture(gestureScene);
 
   // 启动画面
-  if (DEV_ENTRY === 'match') {
+  if (DEV_ENTRY === 'camp2') {
+    resetStack(makeCamp2());
+  } else if (DEV_ENTRY === 'match') {
     resetStack(createMatchScene({ seed: 20261005, difficulty: 'veteran', dev: true }));
   } else if (DEV_ENTRY === 'cycle') {
     resetStack(makeCamp());
@@ -119,18 +132,6 @@ function boot(): void {
         beginFrame(ctx);
         renderScene(ctx, nowMs(), alpha);
         endFrame(ctx);
-        if (!probedOnce) {
-          probedOnce = true;
-          try {
-            const d = ctx.getImageData(Math.floor(ctx.canvas.width / 2), Math.floor(ctx.canvas.height / 2), 1, 1).data;
-            const d2 = ctx.getImageData(40, 40, 1, 1).data;
-            console.log('[petbrawl] probe center=' + d[0] + ',' + d[1] + ',' + d[2] + ',' + d[3] +
-              ' corner=' + d2[0] + ',' + d2[1] + ',' + d2[2] + ',' + d2[3] +
-              ' canvas=' + ctx.canvas.width + 'x' + ctx.canvas.height);
-          } catch (e2) {
-            console.log('[petbrawl] probe failed: ' + e2);
-          }
-        }
       } catch (err) {
         if (!renderFailed) {
           renderFailed = true;

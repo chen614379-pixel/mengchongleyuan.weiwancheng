@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>萌宠乱斗 · 森野手账 — UI 重构框架</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ 图标库 ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-coin" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9.2" fill="#F0BE4E" stroke="#2B2923" stroke-width="1.7"/>
+    <circle cx="12" cy="12" r="6.4" fill="none" stroke="#2B2923" stroke-width="1.1" opacity=".5"/>
+    <circle cx="9.7" cy="9.6" r="1.05" fill="#2B2923"/><circle cx="14.3" cy="9.6" r="1.05" fill="#2B2923"/>
+    <circle cx="8.6" cy="12.7" r=".95" fill="#2B2923"/><circle cx="15.4" cy="12.7" r=".95" fill="#2B2923"/>
+    <ellipse cx="12" cy="14.8" rx="3" ry="2.3" fill="#2B2923"/>
+  </symbol>
+  <symbol id="i-star" viewBox="0 0 24 24">
+    <path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 17.4 6.2 20.4l1.1-6.4L2.6 9.4l6.5-.9z" fill="#F0BE4E" stroke="#2B2923" stroke-width="1.6" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-paw" viewBox="0 0 24 24">
+    <ellipse cx="7" cy="8" rx="2.1" ry="2.7" fill="currentColor"/>
+    <ellipse cx="12" cy="6.4" rx="2.1" ry="2.8" fill="currentColor"/>
+    <ellipse cx="17" cy="8" rx="2.1" ry="2.7" fill="currentColor"/>
+    <path d="M12 10.2c3 0 5.6 2.6 5.6 5.3 0 2.1-1.7 3.3-3.6 3.3-1 0-1.4-.4-2-.4s-1 .4-2 .4c-1.9 0-3.6-1.2-3.6-3.3 0-2.7 2.6-5.3 5.6-5.3z" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5 5l1.6 1.6M17.4 17.4L19 19M19 5l-1.6 1.6M6.6 17.4L5 19"/>
+  </symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 4C11 4 5 8 5 15c0 2 1 4 1 4s7-1 10-4 4-7 4-11z"/>
+    <path d="M6 19c2-5 5-8 9-10"/>
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 4L7 12l8 8"/>
+  </symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 6h9M18 6h2M4 12h2M11 12h9M4 18h9M18 18h2"/>
+    <circle cx="15.5" cy="6" r="2.1"/><circle cx="8.5" cy="12" r="2.1"/><circle cx="15.5" cy="18" r="2.1"/>
+  </symbol>
+  <symbol id="i-cards" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <rect x="3.4" y="6.6" width="9.2" height="13" rx="2" transform="rotate(-9 8 13)"/>
+    <rect x="11" y="4.4" width="9.2" height="13" rx="2" transform="rotate(9 15.6 10.9)"/>
+  </symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M12 6.4C10.4 4.9 7.6 4.4 4 4.6v13.8c3.6-.2 6.4.4 8 1.6 1.6-1.2 4.4-1.8 8-1.6V4.6c-3.6-.2-6.4.3-8 1.8z"/>
+    <path d="M12 6.4V20"/>
+  </symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M5 8h14l-1.1 11.2a1.6 1.6 0 01-1.6 1.4H7.7a1.6 1.6 0 01-1.6-1.4L5 8z"/>
+    <path d="M9 8V6.2A3 3 0 0112 3.2a3 3 0 013 3V8"/>
+  </symbol>
+  <symbol id="i-medal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <circle cx="12" cy="14.6" r="5.2"/>
+    <path d="M8.2 9.8L6 2.8l3.4 1.4L12 1.4l2.6 2.8L18 2.8l-2.2 7"/>
+    <path d="M12 12.2l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">
+    <path d="M12 2.8c3.4 3.8 5.8 6.2 5.8 9.6a5.8 5.8 0 11-11.6 0c0-2 1-3.6 2.4-5.2.3 2 1.2 3.1 2.4 3.6.4-3 .8-5.4 1-8z"/>
+  </symbol>
+  <symbol id="i-swords" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 4h4l9 9-2 2-9-9V4z"/><path d="M20 4h-4l-9 9 2 2 9-9V4z"/>
+    <path d="M6 18l2-2M18 18l-2-2"/>
+  </symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+    <path d="M2.4 12S5.9 5.8 12 5.8 21.6 12 21.6 12 18.1 18.2 12 18.2 2.4 12 2.4 12z"/>
+    <circle cx="12" cy="12" r="2.9"/>
+  </symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 4h2.2l2.3 10.4h9.6L20 7H6"/>
+    <circle cx="9" cy="19.2" r="1.5"/><circle cx="17" cy="19.2" r="1.5"/>
+  </symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 11a8 8 0 10-2.6 6"/><path d="M20 4.4V11h-6.4"/>
+  </symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M3.6 8.6h16.8V12H3.6zM5.2 12v8.2h13.6V12M12 8.6v11.6"/>
+    <path d="M12 8.6C10.6 5.4 9.4 4 7.8 4 6.4 4 5.4 5 5.4 6.2c0 1.6 1.6 2.4 6.6 2.4zM12 8.6c1.4-3.2 2.6-4.6 4.2-4.6 1.4 0 2.4 1 2.4 2.2 0 1.6-1.6 2.4-6.6 2.4z"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.6l5 5L20 6.4"/>
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="8.6"/><path d="M12 7v5.4l3.4 2"/>
+  </symbol>
+  <symbol id="i-speed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 6l7 6-7 6M12 6l7 6-7 6"/>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">
+    <rect x="4.6" y="10.2" width="14.8" height="10.2" rx="2.4"/>
+    <path d="M8 10.2V7.6a4 4 0 018 0v2.6"/>
+  </symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24" fill="#F0BE4E" stroke="#2B2923" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M3 7.4l4.6 3.2L12 4l4.4 6.6L21 7.4l-1.8 11.2H4.8L3 7.4z"/>
+    <circle cx="12" cy="14.6" r="1.3" fill="#A33C1C" stroke="none"/>
+  </symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+    <circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r=".8" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-house" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">
+    <path d="M3.4 11L12 3.4 20.6 11"/><path d="M5.8 9.6v10h12.4v-10"/><path d="M10 19.6v-5.2h4v5.2"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="i-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <path d="M7 4.4l12.4 7.6L7 19.6z"/>
+  </symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 21V4"/><path d="M6 4.8h11.4l-2.2 4 2.2 4H6"/>
+  </symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 11V5.6a1.6 1.6 0 013.2 0V10m0-3.2a1.6 1.6 0 013.2 0V11m0-2.4a1.6 1.6 0 013.2 0v6.1c0 3.4-2.4 6.1-5.8 6.1h-1.2c-2 0-3.3-.9-4.4-2.4L4 13.3c-.8-1.2.6-2.7 1.8-2l1.4 1V7.4a1.6 1.6 0 013.2 0"/>
+  </symbol>
+</svg>
+
+<!-- ============ 原型工具栏 ============ -->
+<div id="toolbar">
+  <div class="brand">萌宠乱斗 · 森野手账<small>UI REFRAME v0.1</small></div>
+  <button class="tab on" data-screen="camp">营地</button>
+  <button class="tab" data-screen="deploy">布阵</button>
+  <button class="tab" data-screen="battle">战斗</button>
+  <button class="tab" data-screen="market">集市</button>
+  <button class="tab" data-screen="result">结算</button>
+  <button class="tab" data-screen="collection">图鉴</button>
+  <div class="sep"></div>
+  <button class="tab" data-screen="system">设计系统</button>
+  <button class="toggle" id="btn-ann">标注</button>
+  <div class="hint">← → 切屏 · 画面内按钮可点击走流程</div>
+</div>
+
+<div id="viewport">
+<div class="stage" id="stage">
+  <div class="grain"></div>
+
+  <!-- ==================================================================
+       营地
+       ================================================================== -->
+  <section class="screen on" id="s-camp">
+    <div class="camp-bg">
+      <div class="photo"></div>
+      <div class="sky"></div>
+      <div class="ray"></div>
+      <div class="ridge"></div>
+      <div class="grass-front"></div>
+    </div>
+
+    <header class="camp-top">
+      <div class="camp-brand">
+        <div class="mark"><svg class="ico" style="width:24px;height:24px"><use href="#i-leaf"/></svg></div>
+        <div class="txt">萌宠乱斗<small>FOREST CAMP</small></div>
+      </div>
+      <div class="camp-wallet">
+        <div class="chip"><svg class="coin" style="width:26px;height:26px"><use href="#i-coin"/></svg><span class="num">1,280</span></div>
+        <div class="chip"><svg style="width:24px;height:24px"><use href="#i-star"/></svg><span class="num">12</span></div>
+      </div>
+      <div class="capsule-zone"></div>
+    </header>
+
+    <div class="camp-copy">
+      <div class="eyebrow"><span class="line"></span>FOREST CAMP · 第 4 回合</div>
+      <h1>萌宠乱斗</h1>
+      <p class="lead">带 <b>6 只小动物</b> 走上林间草地。<br>用克制、天气与站位，赢下 <b>8 个回合</b>。</p>
+      <div class="cta-row">
+        <button class="btn primary xl" data-go="deploy" data-ann="主行动：唯一高亮 CTA">
+          <svg class="ico"><use href="#i-swords"/></svg>开始对战
+        </button>
+        <button class="btn secondary" data-go="collection">图鉴</button>
+      </div>
+      <div class="last"><span class="dot"></span>上一局 · 第 8 回合胜利 · MVP 虎</div>
+    </div>
+
+    <div class="camp-scene" data-ann="插画舞台：不承载任何可点区域">
+      <div class="glow"></div>
+      <div class="mound"></div>
+      <img class="pet p-wolf" src="../../assets/pets/wolf.png" alt="">
+      <img class="pet p-tiger" src="../../assets/pets/tiger.png" alt="">
+      <img class="pet p-dog" src="../../assets/pets/dog.png" alt="">
+      <img class="pet p-elephant" src="../../assets/pets/elephant.png" alt="">
+      <img class="pet p-cat" src="../../assets/pets/cat.png" alt="">
+      <img class="pet p-leopard" src="../../assets/pets/leopard.png" alt="">
+      <div class="fire">
+        <div class="logs"></div>
+        <div class="flame"></div><div class="flame b"></div><div class="flame c"></div>
+      </div>
+    </div>
+
+    <div class="weather-note">
+      <svg class="ico"><use href="#i-sun"/></svg>
+      <div><b>今日 · 林间晴</b><span>我方攻击 +12% · 敌方每 3s 流失 1% 血</span></div>
+    </div>
+
+    <nav class="camp-dock" data-ann="底部导航坞：拇指区，全部入口可见">
+      <div class="camp-profile">
+        <div class="ava"><img src="../../assets/ui/coach-boy.png" alt=""></div>
+        <div class="meta">
+          <div class="name">小园丁 <span>Lv. 6</span></div>
+          <div class="bar"><i></i></div>
+          <div class="sub">青铜 III · 距白银 36</div>
+        </div>
+      </div>
+      <div class="camp-tiles">
+        <button class="camp-tile" data-scene="deck">
+          <span class="ic"><svg class="ico"><use href="#i-cards"/></svg></span>
+          <span class="t">卡组<small>DECK · 12</small></span>
+          <span class="badge">2</span>
+        </button>
+        <button class="camp-tile" data-go="collection">
+          <span class="ic"><svg class="ico"><use href="#i-book"/></svg></span>
+          <span class="t">图鉴<small>DEX · 8</small></span>
+        </button>
+        <button class="camp-tile hot" data-scene="shop">
+          <span class="ic"><svg class="ico"><use href="#i-bag"/></svg></span>
+          <span class="t">商店<small>SHOP · 3</small></span>
+          <span class="badge">!</span>
+        </button>
+        <button class="camp-tile" data-scene="rank">
+          <span class="ic"><svg class="ico"><use href="#i-medal"/></svg></span>
+          <span class="t">段位<small>RANK · 青铜</small></span>
+        </button>
+      </div>
+      <div class="gear-wrap">
+        <button class="icon-btn dark" data-scene="settings"><svg class="ico"><use href="#i-gear"/></svg></button>
+      </div>
+    </nav>
+  </section>
+
+  <!-- ==================================================================
+       布阵
+       ================================================================== -->
+  <section class="screen match" id="s-deploy">
+    <div class="match-bg"></div>
+
+    <div class="mtop">
+      <button class="icon-btn back" data-go="camp"><svg class="ico"><use href="#i-back"/></svg></button>
+      <div class="round">第 1 回合 <small>/ 8</small>
+        <span class="pips"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="phases">
+        <div class="phase on"><svg class="ico"><use href="#i-flag"/></svg>布阵</div>
+        <div class="phase"><svg class="ico"><use href="#i-eye"/></svg>观测</div>
+        <div class="phase"><svg class="ico"><use href="#i-swords"/></svg>战斗</div>
+        <div class="phase"><svg class="ico"><use href="#i-cart"/></svg>集市</div>
+      </div>
+      <div class="timer"><svg class="ico"><use href="#i-clock"/></svg>18s</div>
+      <div class="capsule-zone"></div>
+    </div>
+
+    <div class="mbody">
+      <aside class="side player">
+        <div class="who"><span class="dot"></span>我方</div>
+        <div class="hud-card">
+          <div class="label">小屋</div>
+          <div class="big"><b>24</b><span>/ 30</span></div>
+          <div class="housebar"><i style="width:80%"></i></div>
+          <div class="kv"><span>战力</span><b>4,280</b></div>
+        </div>
+        <div class="mini-title">布阵 · 3 / 4</div>
+        <div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+        <div class="hintbox">拖到苔藓垫上<br>点动物可看详情</div>
+      </aside>
+
+      <div class="board">
+        <div class="meadow"></div>
+        <div class="shade"></div>
+        <div class="zone p"></div>
+        <div class="zone e"></div>
+        <svg class="river" viewBox="0 0 928 460" preserveAspectRatio="none">
+          <path d="M-20 236 C 180 214, 330 258, 500 232 S 800 210, 950 230" fill="none" stroke="#5f97a6" stroke-width="30" opacity=".38"/>
+          <path d="M-20 236 C 180 214, 330 258, 500 232 S 800 210, 950 230" fill="none" stroke="#b9dfe4" stroke-width="8" opacity=".5"/>
+        </svg>
+
+        <div class="weather"><svg class="ico"><use href="#i-sun"/></svg><b>林间晴</b><span>攻击 +12%</span></div>
+        <div class="power"><span class="a">我方 4,280</span><span class="vs">VS</span><span class="b">敌方 ???</span></div>
+
+        <div class="anchors p" data-pads="24" data-valid="4,9,21"></div>
+        <div class="anchors e" data-pads="24"></div>
+        <div class="zone-label p">我方营地 · 6 × 4</div>
+        <div class="zone-label e">敌方营地 · 迷雾</div>
+
+        <div class="fog"><div class="q" style="left:58%;top:18%">?</div><div class="q" style="left:78%;top:30%">?</div><div class="q" style="left:68%;top:44%">?</div></div>
+
+        <!-- 我方已布阵 -->
+        <div class="unit sel" style="left:12.5%;top:68.75%">
+          <div class="body"><img src="../../assets/pets/tiger.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="236 283"/></svg>
+            <span class="lv">Lv.3</span><span class="buffs"><i></i><i></i></span>
+          </div>
+        </div>
+        <div class="unit" style="left:29.17%;top:81.25%">
+          <div class="body"><img src="../../assets/pets/elephant.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="283 283"/></svg>
+            <span class="lv">Lv.2</span><span class="buffs"><i></i></span>
+          </div>
+        </div>
+        <div class="unit" style="left:45.83%;top:68.75%">
+          <div class="body"><img src="../../assets/pets/dog.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="198 283"/></svg>
+            <span class="lv">Lv.2</span><span class="buffs"><i></i></span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side enemy">
+        <div class="who"><span class="dot"></span>敌方 · 老兵</div>
+        <div class="hud-card">
+          <div class="label">小屋</div>
+          <div class="big"><b>28</b><span>/ 30</span></div>
+          <div class="housebar"><i style="width:93%"></i></div>
+          <div class="kv"><span>战力</span><b>???</b></div>
+        </div>
+        <div class="mini-title">敌情 · 迷雾</div>
+        <div class="pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="hintbox">观测阶段<br>揭晓对手阵容</div>
+      </aside>
+    </div>
+
+    <div class="teach"><span class="hand"><svg class="ico" style="width:16px;height:16px"><use href="#i-hand"/></svg></span>选中动物 → 点亮苔藓垫 → 再点一下落位</div>
+
+    <div class="mdock">
+      <div class="bench-wrap">
+        <div class="bench-head"><span class="t">替补席</span><span class="n">5 / 8</span><span class="tip">点选后可拖动</span></div>
+        <div class="bench">
+          <div class="slot"><span class="cost">2</span><img src="../../assets/pets/wolf.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">1</span><img src="../../assets/pets/cat.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">5</span><img src="../../assets/pets/lion.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">1</span><img src="../../assets/pets/mouse.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">3</span><img src="../../assets/pets/leopard.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+        </div>
+      </div>
+      <div class="dock-mid">
+        <div class="dock-stats">
+          <div class="stat-pill"><svg class="ico" style="color:#f0be4e"><use href="#i-sun"/></svg>阳光 <b>12</b></div>
+          <div class="stat-pill">利息 <b>+2</b></div>
+          <div class="stat-pill">上限 <b>3</b></div>
+        </div>
+        <div class="dock-hint">第 1 回合 · <b>布阵上限 3</b>，每回合 +1（最多 6）<br>同种动物 3 只自动合成，升级后属性 ×1.35</div>
+      </div>
+      <div class="dock-actions">
+        <button class="btn primary" data-go="battle"><svg class="ico"><use href="#i-check"/></svg>准备就绪</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================
+       战斗
+       ================================================================== -->
+  <section class="screen match" id="s-battle">
+    <div class="match-bg"></div>
+
+    <div class="mtop">
+      <button class="icon-btn back" data-go="camp"><svg class="ico"><use href="#i-back"/></svg></button>
+      <div class="round">第 3 回合 <small>/ 8</small>
+        <span class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="phases">
+        <div class="phase done"><svg class="ico"><use href="#i-flag"/></svg>布阵</div>
+        <div class="phase done"><svg class="ico"><use href="#i-eye"/></svg>观测</div>
+        <div class="phase on"><svg class="ico"><use href="#i-swords"/></svg>战斗</div>
+        <div class="phase"><svg class="ico"><use href="#i-cart"/></svg>集市</div>
+      </div>
+      <div class="timer"><svg class="ico"><use href="#i-clock"/></svg>32s</div>
+      <div class="capsule-zone"></div>
+    </div>
+
+    <div class="mbody">
+      <aside class="side player">
+        <div class="who"><span class="dot"></span>我方</div>
+        <div class="hud-card">
+          <div class="label">小屋</div>
+          <div class="big"><b>21</b><span>/ 30</span></div>
+          <div class="housebar"><i style="width:70%"></i></div>
+          <div class="kv"><span>存活</span><b>5 / 6</b></div>
+        </div>
+        <div class="mini-title">战力 4,280</div>
+        <div class="hud-card" style="padding:9px 12px">
+          <div class="kv" style="margin:0"><span>克制命中</span><b>3 次</b></div>
+          <div class="kv"><span>爆发</span><b>428</b></div>
+        </div>
+        <div class="hintbox">战斗自动进行<br>指挥可集火一次</div>
+      </aside>
+
+      <div class="board">
+        <div class="meadow"></div>
+        <div class="shade"></div>
+        <div class="zone p"></div>
+        <div class="zone e"></div>
+        <svg class="river" viewBox="0 0 928 460" preserveAspectRatio="none">
+          <path d="M-20 236 C 180 214, 330 258, 500 232 S 800 210, 950 230" fill="none" stroke="#5f97a6" stroke-width="30" opacity=".38"/>
+          <path d="M-20 236 C 180 214, 330 258, 500 232 S 800 210, 950 230" fill="none" stroke="#b9dfe4" stroke-width="8" opacity=".5"/>
+        </svg>
+
+        <div class="weather"><svg class="ico"><use href="#i-sun"/></svg><b>林间晴</b><span>攻击 +12%</span></div>
+        <div class="power"><span class="a">4,280</span><span class="vs">VS</span><span class="b">4,760</span><span class="gap">差 -480</span></div>
+        <div class="speed"><button>1×</button><button class="on">2×</button></div>
+
+        <!-- 我方 -->
+        <div class="unit" style="left:12.5%;top:66%">
+          <div class="body"><img src="../../assets/pets/tiger.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="150 283"/></svg>
+            <span class="lv">Lv.3</span><span class="buffs"><i></i><i></i></span>
+          </div>
+        </div>
+        <div class="dmg" style="left:16%;top:52%">-214</div>
+        <div class="unit" style="left:25%;top:80%">
+          <div class="body"><img src="../../assets/pets/elephant.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="221 283"/></svg>
+            <span class="lv">Lv.2</span><span class="buffs"><i></i></span>
+          </div>
+        </div>
+        <div class="unit" style="left:37.5%;top:64%">
+          <div class="body"><img src="../../assets/pets/dog.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="90 283"/></svg>
+            <span class="lv">Lv.2</span><span class="buffs"><i></i></span>
+          </div>
+        </div>
+        <div class="unit" style="left:20.8%;top:52%">
+          <div class="body"><img src="../../assets/pets/leopard.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="240 283"/></svg>
+            <span class="lv">Lv.2</span>
+          </div>
+        </div>
+
+        <!-- 敌方 -->
+        <div class="unit enemy" style="left:70.8%;top:22%">
+          <div class="body"><img src="../../assets/pets/lion.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="70 283"/></svg>
+            <span class="lv">Lv.3</span>
+          </div>
+        </div>
+        <div class="unit enemy" style="left:83.3%;top:34%">
+          <div class="body"><img src="../../assets/pets/wolf.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="210 283"/></svg>
+            <span class="lv">Lv.2</span>
+          </div>
+        </div>
+        <div class="dmg crit" style="left:74%;top:38%">-428</div>
+        <div class="unit enemy" style="left:75%;top:46%">
+          <div class="body"><img src="../../assets/pets/cat.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="160 283"/></svg>
+            <span class="lv">Lv.2</span>
+          </div>
+        </div>
+        <div class="unit enemy" style="left:91.7%;top:20%">
+          <div class="body"><img src="../../assets/pets/mouse.png" alt="">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="val" cx="50" cy="50" r="45" stroke-dasharray="50 283"/></svg>
+            <span class="lv">Lv.1</span>
+          </div>
+        </div>
+
+        <div class="hit-ring" style="left:81%;top:50%"></div>
+
+        <div class="feed"><span class="k">虎</span> 克制 <span class="x">猫</span> · 暴击 428 <span class="time">刚刚</span></div>
+      </div>
+
+      <aside class="side enemy">
+        <div class="who"><span class="dot"></span>敌方 · 老兵</div>
+        <div class="hud-card">
+          <div class="label">小屋</div>
+          <div class="big"><b>17</b><span>/ 30</span></div>
+          <div class="housebar"><i style="width:57%"></i></div>
+          <div class="kv"><span>存活</span><b>3 / 6</b></div>
+        </div>
+        <div class="mini-title">战力 4,760</div>
+        <div class="hud-card" style="padding:9px 12px">
+          <div class="kv" style="margin:0"><span>克制命中</span><b>2 次</b></div>
+          <div class="kv"><span>爆发</span><b>312</b></div>
+        </div>
+        <div class="hintbox">2× 速度播放中<br>可随时切回 1×</div>
+      </aside>
+    </div>
+
+    <div class="mdock">
+      <div class="bench-wrap">
+        <div class="bench-head"><span class="t">替补席</span><span class="n">3 / 8</span><span class="tip">战斗中不可换人</span></div>
+        <div class="bench" style="opacity:.55">
+          <div class="slot"><span class="cost">1</span><img src="../../assets/pets/mouse.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">3</span><img src="../../assets/pets/leopard.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">2</span><img src="../../assets/pets/wolf.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+        </div>
+      </div>
+      <div class="dock-mid">
+        <div class="dock-stats">
+          <div class="stat-pill"><svg class="ico" style="color:#f0be4e"><use href="#i-sun"/></svg>阳光 <b>17</b></div>
+          <div class="stat-pill">利息 <b>+3</b></div>
+          <div class="stat-pill">指挥 <b>就绪</b></div>
+        </div>
+        <div class="dock-hint">下一波：敌方 <b>狮</b> 正在接近小屋<br>点「指挥」让全队集火当前目标，每场 1 次</div>
+      </div>
+      <div class="dock-actions">
+        <button class="btn primary" data-go="market"><svg class="ico"><use href="#i-target"/></svg>指挥 · 集火</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================
+       集市
+       ================================================================== -->
+  <section class="screen market" id="s-market">
+    <div class="market-bg"><div class="lanterns"></div><div class="canopy"></div></div>
+
+    <div class="mtop">
+      <button class="icon-btn back" data-go="battle"><svg class="ico"><use href="#i-back"/></svg></button>
+      <div class="round">第 3 回合 <small>/ 8</small>
+        <span class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="phases">
+        <div class="phase done"><svg class="ico"><use href="#i-flag"/></svg>布阵</div>
+        <div class="phase done"><svg class="ico"><use href="#i-eye"/></svg>观测</div>
+        <div class="phase done"><svg class="ico"><use href="#i-swords"/></svg>战斗</div>
+        <div class="phase on"><svg class="ico"><use href="#i-cart"/></svg>集市</div>
+      </div>
+      <div class="timer"><svg class="ico"><use href="#i-clock"/></svg>40s</div>
+      <div class="capsule-zone"></div>
+    </div>
+
+    <div class="mk-head">
+      <div class="mk-title">林间集市<small>ROUND 3 · MARKET</small></div>
+      <div class="mk-stats">
+        <div class="mk-chip main"><svg class="ico"><use href="#i-sun"/></svg><b>12</b><span>本回合阳光</span></div>
+        <div class="mk-chip"><b>+2</b><span>利息</span></div>
+        <div class="mk-chip"><b>+5</b><span>回合收入</span></div>
+        <div class="mk-chip"><b>2 / 3</b><span>刷新次数</span></div>
+      </div>
+      <div class="mk-tags">
+        <span class="tag gold">本局倾向 · 猫 +25%</span>
+        <span class="tag">林间晴 · 攻击 +12%</span>
+      </div>
+    </div>
+
+    <div class="mk-shelf">
+      <div class="shelf">
+        <article class="petcard mkcard" style="--tint:#f0d8a2">
+          <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>4</div>
+          <div class="flag">可合成 2</div>
+          <div class="art"><img src="../../assets/pets/tiger.png" alt=""></div>
+          <div class="name">虎 <span class="en">TIGER</span></div>
+          <div class="stats"><span>攻 <b>104</b></span><span>速 <b>1.15</b></span><span>血 <b>800</b></span></div>
+          <div class="tags"><span class="tag good">克猫 ×1.5</span><span class="tag">暴击 30%</span></div>
+          <button class="buy"><svg class="ico"><use href="#i-plus"/></svg>买入 · 4</button>
+        </article>
+
+        <article class="petcard mkcard" style="--tint:#cddbe3">
+          <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>6</div>
+          <div class="art"><img src="../../assets/pets/elephant.png" alt=""></div>
+          <div class="name">象 <span class="en">ELEPHANT</span></div>
+          <div class="stats"><span>攻 <b>80</b></span><span>速 <b>1.60</b></span><span>血 <b>1300</b></span></div>
+          <div class="tags"><span class="tag dusk">被狼克</span><span class="tag">击退</span></div>
+          <button class="buy poor"><svg class="ico"><use href="#i-lock"/></svg>还差 1 阳光</button>
+        </article>
+
+        <article class="petcard mkcard" style="--tint:#f3d9ab">
+          <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>2</div>
+          <div class="art"><img src="../../assets/pets/dog.png" alt=""></div>
+          <div class="name">狗 <span class="en">DOG</span></div>
+          <div class="stats"><span>攻 <b>42</b></span><span>速 <b>0.80</b></span><span>血 <b>400</b></span></div>
+          <div class="tags"><span class="tag good">克鼠 ×1.5</span><span class="tag">群猎</span></div>
+          <button class="buy"><svg class="ico"><use href="#i-plus"/></svg>买入 · 2</button>
+        </article>
+
+        <article class="petcard mkcard" style="--tint:#e7dcae">
+          <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>2</div>
+          <div class="flag">天气</div>
+          <div class="art" style="background:linear-gradient(160deg,#cfe6e2,#f3ecc9)">
+            <img src="../../assets/cards/weather-sunny.jpg" style="width:100%;height:100%;object-fit:cover;bottom:0;filter:none">
+          </div>
+          <div class="name">林间晴 <span class="en">WEATHER</span></div>
+          <div class="stats"><span>我方攻 <b>+12%</b></span></div>
+          <div class="tags"><span class="tag good">持续整局</span><span class="tag bad">敌 -1%/3s</span></div>
+          <button class="buy"><svg class="ico"><use href="#i-plus"/></svg>买入 · 2</button>
+        </article>
+
+        <article class="petcard mkcard" style="--tint:#c9c3b4">
+          <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>3</div>
+          <div class="art"><img src="../../assets/pets/cat.png" alt=""></div>
+          <div class="name">猫 <span class="en">CAT</span></div>
+          <div class="stats"><span>攻 <b>88</b></span><span>速 <b>0.95</b></span><span>血 <b>520</b></span></div>
+          <div class="tags"><span class="tag gold">倾向 +25%</span><span class="tag good">克狮 ×1.5</span></div>
+          <button class="buy"><svg class="ico"><use href="#i-plus"/></svg>买入 · 3</button>
+        </article>
+      </div>
+    </div>
+
+    <div class="mk-bench">
+      <div class="bench-left">
+        <div class="bh">
+          <span class="t">替补席</span><span class="n">5 / 8</span>
+          <span class="tip">点选动物可卖出 · 同种 3 只自动合成并升级</span>
+        </div>
+        <div class="row">
+          <div class="slot sel"><span class="cost">2</span><img src="../../assets/pets/wolf.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">1</span><img src="../../assets/pets/cat.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">5</span><img src="../../assets/pets/lion.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">1</span><img src="../../assets/pets/mouse.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot"><span class="cost">3</span><img src="../../assets/pets/leopard.png" alt=""><span class="lv">Lv.1</span></div>
+          <div class="slot empty" data-n="6"></div><div class="slot empty" data-n="7"></div><div class="slot empty" data-n="8"></div>
+        </div>
+      </div>
+      <div class="sellcard">
+        <img src="../../assets/pets/wolf.png" alt="">
+        <div class="sc-body"><b>狼 · Lv.1</b><span>已选中 · 卖出可回收 2 阳光</span></div>
+        <button class="btn secondary sm">卖出 +2</button>
+      </div>
+    </div>
+
+    <div class="mk-actions">
+      <button class="btn secondary"><svg class="ico"><use href="#i-refresh"/></svg>刷新 · 2 阳光</button>
+      <button class="btn secondary"><svg class="ico"><use href="#i-gift"/></svg>免费礼物 · 1 张</button>
+      <span class="hint">买入的动物先进入替补席，拖到棋盘才算上阵</span>
+      <button class="btn primary" data-go="deploy">收摊 · 进入第 4 回合<svg class="ico"><use href="#i-arrow-r"/></svg></button>
+    </div>
+  </section>
+
+  <!-- ==================================================================
+       结算
+       ================================================================== -->
+  <section class="screen" id="s-result">
+    <div class="result-bg"><div class="photo"></div><div class="scrim"></div></div>
+    <div class="confetti">
+      <i style="left:6%;background:#F0BE4E;animation-duration:7s;animation-delay:-1s"></i>
+      <i style="left:13%;background:#E2663A;animation-duration:9s;animation-delay:-4s"></i>
+      <i style="left:21%;background:#A8C98A;animation-duration:6.4s;animation-delay:-2s"></i>
+      <i style="left:29%;background:#F0BE4E;animation-duration:8s;animation-delay:-5s"></i>
+      <i style="left:37%;background:#B9A5D6;animation-duration:7.4s;animation-delay:-3s"></i>
+      <i style="left:46%;background:#E2663A;animation-duration:9.4s;animation-delay:-6s"></i>
+      <i style="left:54%;background:#F0BE4E;animation-duration:6.8s;animation-delay:-2.5s"></i>
+      <i style="left:63%;background:#A8C98A;animation-duration:8.2s;animation-delay:-4.5s"></i>
+      <i style="left:71%;background:#F0BE4E;animation-duration:7.2s;animation-delay:-1.5s"></i>
+      <i style="left:79%;background:#B9A5D6;animation-duration:9.2s;animation-delay:-5.5s"></i>
+      <i style="left:87%;background:#E2663A;animation-duration:6.6s;animation-delay:-3.5s"></i>
+      <i style="left:94%;background:#A8C98A;animation-duration:8.6s;animation-delay:-6.5s"></i>
+    </div>
+
+    <div class="result-wrap">
+      <div class="result-head">
+        <div class="win">胜 利</div>
+        <div class="meta">第 8 回合 · 小屋 HP 24 vs 8 · 用时 6:42</div>
+      </div>
+
+      <div class="result-panel">
+        <div class="result-grid">
+          <div class="mvp">
+            <svg class="crown"><use href="#i-crown"/></svg>
+            <div class="art"><img src="../../assets/pets/tiger.png" alt=""></div>
+            <div class="name">虎</div>
+            <div class="lv">MVP · Lv.3 · 暴击 30%</div>
+            <div class="nums">
+              <div><b>1120</b><span>总伤害</span></div>
+              <div><b>640</b><span>承伤</span></div>
+              <div><b>3</b><span>击杀</span></div>
+            </div>
+          </div>
+
+          <div class="rcol">
+            <h3>伤害构成</h3>
+            <div class="dmgbar">
+              <i style="width:42%;background:linear-gradient(#f3b26a,#e2843c)"></i>
+              <i style="width:26%;background:linear-gradient(#f6d488,#eab84e)"></i>
+              <i style="width:18%;background:linear-gradient(#a9c7e2,#7da8cc)"></i>
+              <i style="width:9%;background:linear-gradient(#b6d69a,#8dbd6e)"></i>
+              <i style="width:5%;background:linear-gradient(#c9b8dd,#a58fc0)"></i>
+            </div>
+            <div class="dmglegend">
+              <div class="li"><i style="background:#e2843c"></i>普攻 <b>1,192</b></div>
+              <div class="li"><i style="background:#eab84e"></i>克制 <b>738</b></div>
+              <div class="li"><i style="background:#7da8cc"></i>天气 <b>512</b></div>
+              <div class="li"><i style="background:#8dbd6e"></i>加成 <b>256</b></div>
+              <div class="li"><i style="background:#a58fc0"></i>其他 <b>142</b></div>
+              <div class="li"><i style="background:transparent;border:none"></i></div>
+            </div>
+            <div class="dmgtotal">
+              <span class="k">总伤害</span>
+              <span class="v">2,840<small>/ 敌方 4,760</small></span>
+            </div>
+            <div class="highlight">关键回合：第 7 回合 <b>虎</b> 连续两次暴击，拆掉敌方后排，克制贡献 <b>26%</b>。</div>
+            <div class="sub" style="margin-top:8px">详细复盘（逐只伤害 / 回合时间轴）收在「复盘」里，不遮挡主结算。</div>
+          </div>
+
+          <div class="rcol">
+            <h3>本局奖励</h3>
+            <div class="reward">
+              <div class="line">
+                <div class="ic"><svg class="ico"><use href="#i-coin"/></svg></div>
+                <div class="t">爪印币<small>对局结算 + 段位加成</small></div>
+                <div class="v">+80</div>
+              </div>
+              <div class="line">
+                <div class="ic"><svg class="ico"><use href="#i-star"/></svg></div>
+                <div class="t">星辉<small>首次击败「老兵」难度</small></div>
+                <div class="v">+3</div>
+              </div>
+              <div class="line">
+                <div class="ic"><svg class="ico"><use href="#i-book"/></svg></div>
+                <div class="t">图鉴收录<small>本局新增 2 只</small></div>
+                <div class="v">8/8</div>
+              </div>
+              <div class="exp">
+                <div class="row"><span>段位经验 · 青铜 III</span><span>74 / 100</span></div>
+                <div class="bar"><i></i></div>
+              </div>
+            </div>
+            <div class="sub" style="margin-top:10px">收入 42 · 买卡 26 · 刷新 5 · 利息 3</div>
+          </div>
+        </div>
+
+        <div class="result-foot">
+          <span class="hint">分享只会生成战绩卡，不打断下一局</span>
+          <button class="btn secondary"><svg class="ico"><use href="#i-eye"/></svg>查看复盘</button>
+          <button class="btn secondary" data-go="camp"><svg class="ico"><use href="#i-house"/></svg>返回营地</button>
+          <button class="btn primary" data-go="deploy"><svg class="ico"><use href="#i-play"/></svg>再来一局</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================
+       图鉴
+       ================================================================== -->
+  <section class="screen panel-page" id="s-collection">
+    <div class="panel-bg"></div>
+
+    <div class="ptop">
+      <button class="icon-btn back" data-go="camp"><svg class="ico"><use href="#i-back"/></svg></button>
+      <div>
+        <div class="title">森林图鉴</div>
+        <div class="crumb">CAMP / 图鉴 · 8 种动物</div>
+      </div>
+      <div class="wallet">
+        <div class="chip"><svg style="width:24px;height:24px"><use href="#i-coin"/></svg><span class="num">1,280</span></div>
+        <div class="chip"><svg style="width:22px;height:22px"><use href="#i-star"/></svg><span class="num">12</span></div>
+      </div>
+      <div class="capsule-zone"></div>
+    </div>
+
+    <div class="pbody">
+      <aside class="prail">
+        <div class="sec">COLLECTION</div>
+        <button class="ptab" data-scene="deck"><svg class="ico"><use href="#i-cards"/></svg>卡组<span class="n">2 套</span></button>
+        <button class="ptab on"><svg class="ico"><use href="#i-book"/></svg>图鉴<span class="n">8/8</span></button>
+        <button class="ptab" data-scene="rank"><svg class="ico"><use href="#i-medal"/></svg>段位<span class="n">青铜 III</span></button>
+        <button class="ptab" data-scene="shop"><svg class="ico"><use href="#i-bag"/></svg>商店<span class="n">3</span></button>
+        <div class="sec" style="margin-top:12px">SYSTEM</div>
+        <button class="ptab" data-scene="settings"><svg class="ico"><use href="#i-gear"/></svg>设置</button>
+        <div class="rankcard">
+          <div class="r"><svg class="ico"><use href="#i-medal"/></svg>青铜 III</div>
+          <div class="bar"><i></i></div>
+          <div class="s">距白银 IV 还差 26 · 胜率 62%</div>
+        </div>
+      </aside>
+
+      <div class="pcontent">
+        <div class="phead">
+          <h2>图鉴</h2>
+          <span class="count">已收录 8 / 8</span>
+          <span class="desc">每只动物都记录克制关系、特技与最佳站位</span>
+        </div>
+        <div class="filters">
+          <button class="fchip on">全部 8</button>
+          <button class="fchip">已遇见 8</button>
+          <button class="fchip">未遇见 0</button>
+          <button class="fchip">可合成 2</button>
+          <span class="spacer"></span>
+          <span class="search"><svg class="ico" style="width:15px;height:15px"><use href="#i-eye"/></svg>按克制筛选</span>
+        </div>
+
+        <div class="pgrid">
+          <article class="petcard" style="--tint:#f0d8a2">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>4</div>
+            <div class="flag">已满级</div>
+            <div class="art"><img src="../../assets/pets/tiger.png" alt=""></div>
+            <div class="name">虎 <span class="en">TIGER</span></div>
+            <div class="stats"><span>攻 <b>104</b></span><span>速 <b>1.15</b></span><span>血 <b>800</b></span></div>
+            <div class="tags"><span class="tag good">克猫 ×1.5</span><span class="tag bad">被狮 ×0.75</span></div>
+          </article>
+          <article class="petcard" style="--tint:#cddbe3">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>6</div>
+            <div class="art"><img src="../../assets/pets/elephant.png" alt=""></div>
+            <div class="name">象 <span class="en">ELEPHANT</span></div>
+            <div class="stats"><span>攻 <b>80</b></span><span>速 <b>1.60</b></span><span>血 <b>1300</b></span></div>
+            <div class="tags"><span class="tag good">克狼 ×1.5</span><span class="tag bad">被猫 ×0.75</span></div>
+          </article>
+          <article class="petcard" style="--tint:#f3d9ab">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>2</div>
+            <div class="art"><img src="../../assets/pets/dog.png" alt=""></div>
+            <div class="name">狗 <span class="en">DOG</span></div>
+            <div class="stats"><span>攻 <b>42</b></span><span>速 <b>0.80</b></span><span>血 <b>400</b></span></div>
+            <div class="tags"><span class="tag good">克鼠 ×1.5</span><span class="tag bad">被象 ×0.75</span></div>
+          </article>
+          <article class="petcard" style="--tint:#e9d7a4">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>3</div>
+            <div class="art"><img src="../../assets/pets/leopard.png" alt=""></div>
+            <div class="name">豹 <span class="en">LEOPARD</span></div>
+            <div class="stats"><span>攻 <b>96</b></span><span>速 <b>0.70</b></span><span>血 <b>560</b></span></div>
+            <div class="tags"><span class="tag good">克狗 ×1.5</span><span class="tag bad">被象 ×0.75</span></div>
+          </article>
+          <article class="petcard" style="--tint:#f0c58e">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>5</div>
+            <div class="art"><img src="../../assets/pets/lion.png" alt=""></div>
+            <div class="name">狮 <span class="en">LION</span></div>
+            <div class="stats"><span>攻 <b>120</b></span><span>速 <b>1.30</b></span><span>血 <b>1050</b></span></div>
+            <div class="tags"><span class="tag good">克虎 ×1.5</span><span class="tag bad">被猫 ×0.75</span></div>
+          </article>
+          <article class="petcard" style="--tint:#c3ccd3">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>2</div>
+            <div class="art"><img src="../../assets/pets/wolf.png" alt=""></div>
+            <div class="name">狼 <span class="en">WOLF</span></div>
+            <div class="stats"><span>攻 <b>76</b></span><span>速 <b>0.90</b></span><span>血 <b>620</b></span></div>
+            <div class="tags"><span class="tag good">克象 ×1.5</span><span class="tag bad">被狮 ×0.75</span></div>
+          </article>
+          <article class="petcard" style="--tint:#f2c9c0">
+            <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>1</div>
+            <div class="art"><img src="../../assets/pets/cat.png" alt=""></div>
+            <div class="name">猫 <span class="en">CAT</span></div>
+            <div class="stats"><span>攻 <b>88</b></span><span>速 <b>0.95</b></span><span>血 <b>520</b></span></div>
+            <div class="tags"><span class="tag good">克狮 ×1.5</span><span class="tag bad">被虎 ×0.75</span></div>
+          </article>
+          <article class="petcard locked" style="--tint:#d8d3c8">
+            <div class="cost"><svg class="ico"><use href="#i-lock"/></svg></div>
+            <div class="art"><img src="../../assets/pets/mouse.png" alt=""></div>
+            <div class="name">鼠 <span class="en">MOUSE</span></div>
+            <div class="stats"><span>攻 <b>?</b></span><span>速 <b>?</b></span><span>血 <b>?</b></span></div>
+            <div class="tags"><span class="tag">尚未遇见</span><span class="tag">下一局可收录</span></div>
+          </article>
+        </div>
+
+        <div class="pfoot">
+          <span>点卡片查看详情 · 长按直接加入当前卡组</span>
+          <span class="spacer"></span>
+          <span><span class="kbd">←</span> <span class="kbd">→</span> 翻页</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================
+       设计系统
+       ================================================================== -->
+  <section class="screen sys" id="s-system">
+    <div class="sysbg"></div>
+    <div class="wrap">
+      <div class="left">
+        <div class="kicker">DESIGN SYSTEM · v0.1</div>
+        <h1>森野手账</h1>
+        <p>把「森林营地 + 动物打架」翻译成一套可复用的界面语言：信息落在纸上，操作落在木上，环境留在水彩里。所有界面共用同一套 token 与组件。</p>
+        <div class="rule">
+          <div><b>01</b> 一个阶段只有一个主按钮，永远在右侧拇指区。</div>
+          <div><b>02</b> 文字只出现在纸/木表面，不直接压水彩插画。</div>
+          <div><b>03</b> 顶栏 56，右侧 112×40 永久留给微信胶囊。</div>
+          <div><b>04</b> 棋盘/舞台 ≥ 60% 画面，HUD 只占边缘。</div>
+          <div><b>05</b> 最小字号 14（逻辑像素），正文 18–20。</div>
+        </div>
+        <p style="font-size:12px;color:#8a7b60">基准画布 1280×720 · 8pt 间距 · 圆角 12/18/24 · 硬阴影 3–6px</p>
+      </div>
+
+      <div class="right">
+        <div>
+          <h2>COLOR · 色彩</h2>
+          <div class="swatches">
+            <div class="sw"><i style="background:#2b2923"></i><span>墨</span><em>#2B2923</em></div>
+            <div class="sw"><i style="background:#fbf3e0"></i><span>纸</span><em>#FBF3E0</em></div>
+            <div class="sw"><i style="background:#8a5a38"></i><span>木</span><em>#8A5A38</em></div>
+            <div class="sw"><i style="background:#5f8b52"></i><span>苔</span><em>#5F8B52</em></div>
+            <div class="sw"><i style="background:#a8c98a"></i><span>叶</span><em>#A8C98A</em></div>
+            <div class="sw"><i style="background:#e2663a"></i><span>炭</span><em>#E2663A</em></div>
+            <div class="sw"><i style="background:#f0be4e"></i><span>金</span><em>#F0BE4E</em></div>
+            <div class="sw"><i style="background:#6a5a82"></i><span>暮</span><em>#6A5A82</em></div>
+          </div>
+        </div>
+
+        <div>
+          <h2>TYPE · 字阶</h2>
+          <div class="type"><span class="t" style="font-size:44px">萌宠乱斗</span><span class="m">DISPLAY 44 / 900</span></div>
+          <div class="type"><span class="t" style="font-size:32px">第 3 回合 · 集市</span><span class="m">H1 32 / 900</span></div>
+          <div class="type"><span class="t" style="font-size:24px">准备就绪</span><span class="m">H2 24 / 800</span></div>
+          <div class="type"><span class="t" style="font-size:18px;font-weight:700">买入后飞入替补席，同种 3 只自动合成。</span><span class="m">BODY 18 / 600</span></div>
+          <div class="type"><span class="t" style="font-size:14px;font-weight:600">辅助说明与标签最小 14</span><span class="m">CAPTION 14 / 600</span></div>
+        </div>
+
+        <div class="cols">
+          <div class="card">
+            <h2 style="margin-bottom:10px">COMPONENTS · 组件</h2>
+            <div class="row">
+              <button class="btn primary sm">准备就绪</button>
+              <button class="btn secondary sm">返回营地</button>
+              <button class="btn ghost sm">查看复盘</button>
+            </div>
+            <div class="row">
+              <span class="chip light" style="background:#fff"><svg style="width:22px;height:22px"><use href="#i-coin"/></svg>1,280</span>
+              <span class="tag good">克猫 ×1.5</span>
+              <span class="tag bad">被狮 ×0.75</span>
+              <span class="tag gold">倾向 +25%</span>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <div class="slot" style="width:52px;height:52px"><span class="cost">3</span><img src="../../assets/pets/cat.png" alt=""></div>
+              <div class="slot" style="width:52px;height:52px"><span class="cost">2</span><img src="../../assets/pets/wolf.png" alt=""></div>
+              <div class="slot empty" style="width:52px;height:52px"></div>
+              <div class="small" style="margin-left:6px">替补槽 62 / 空槽虚线<br>费用角标 + 等级角标</div>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <div class="stat-pill" style="background:rgba(43,41,35,.06);border-color:rgba(43,41,35,.16);color:#4c473b">
+                <svg class="ico" style="color:#d99a2c"><use href="#i-sun"/></svg>阳光 <b>12</b>
+              </div>
+              <div class="small">战斗内资源用深色药丸，meta 资源用纸色药丸。</div>
+            </div>
+            <div class="small" style="margin-top:14px;border-top:1px dashed rgba(43,41,35,.2);padding-top:10px">
+              按钮：高 64 / 圆角 18 / 硬阴影 6px / 按下位移 4px。<br>
+              统一禁用态：降饱和 + 锁图标 + 原因文案，不隐藏按钮。
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 style="margin-bottom:10px">CARD ANATOMY · 动物卡</h2>
+            <div class="anat">
+              <article class="petcard" style="--tint:#f0d8a2">
+                <div class="cost"><svg class="ico"><use href="#i-sun"/></svg>4</div>
+                <div class="flag">可合成</div>
+                <div class="art"><img src="../../assets/pets/tiger.png" alt=""></div>
+                <div class="name">虎 <span class="en">TIGER</span></div>
+                <div class="stats"><span>攻 <b>104</b></span><span>速 <b>1.15</b></span><span>血 <b>800</b></span></div>
+                <div class="tags"><span class="tag good">克猫 ×1.5</span><span class="tag">暴击 30%</span></div>
+                <button class="buy"><svg class="ico"><use href="#i-plus"/></svg>买入 · 4</button>
+              </article>
+              <ul>
+                <li><b>费用</b> 左上角金色圆角，唯一使用金色角标的位置</li>
+                <li><b>状态</b> 右上角：可合成 / 天气 / 已满级</li>
+                <li><b>插画</b> 统一 4:3 开窗，物种色底，底部草坡</li>
+                <li><b>名字</b> 主名 20 / 900，英文仅作纹理</li>
+                <li><b>三维</b> 攻 / 速 / 血，数字右对齐等宽</li>
+                <li><b>关系</b> 最多两枚标签：克制（绿）/ 被克（红）</li>
+                <li><b>动作</b> 底部按钮，禁用时写明还差多少</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 轻提示 -->
+  <div id="toast" style="position:absolute;left:50%;bottom:150px;transform:translate(-50%,12px);z-index:120;opacity:0;pointer-events:none;transition:.22s ease;background:#2b2923;color:#fff6e0;font-size:15px;font-weight:700;padding:11px 18px;border-radius:12px;border:2px solid #f0be4e;box-shadow:0 8px 24px rgba(0,0,0,.4)"></div>
+</div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
+
+

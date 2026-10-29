@@ -13,6 +13,7 @@ var storage_1 = require("./platform/storage");
 var manager_1 = require("./scene/manager");
 var boot_1 = require("./scene/boot");
 var camp_1 = require("./scene/camp");
+var camp2_1 = require("./scene/camp2");
 var match_1 = require("./scene/match");
 var deck_1 = require("./scene/deck");
 var collection_1 = require("./scene/collection");
@@ -24,14 +25,13 @@ var shop_1 = require("./scene/shop");
  *   'match'     → 直接进对局，走 dev 脚本自动布阵/推进（核对布阵/战斗/集市/结算）
  *   'cycle'     → 每 4 秒换一个界面：卡组 → 图鉴 → 段位 → 商店 → 设置 → 营地
  */
-var DEV_ENTRY = null;
+var DEV_ENTRY = 'camp2';
 var devStep = 0;
 var devStepAt = 0;
 var devStarted = false;
 var renderedOnce = false;
 var renderFailed = false;
 var tickFailed = false;
-var probedOnce = false;
 var DEV_CYCLE = [
     { make: function () { return (0, deck_1.createDeckScene)(); } },
     { make: function () { return (0, collection_1.createCollectionScene)(); } },
@@ -41,6 +41,16 @@ var DEV_CYCLE = [
 ];
 function makeCamp() {
     return new camp_1.CampScene({
+        onStartMatch: function () { return (0, manager_1.push)((0, match_1.createMatchScene)()); },
+        onOpenDeck: function () { return (0, manager_1.push)((0, deck_1.createDeckScene)()); },
+        onOpenCollection: function () { return (0, manager_1.push)((0, collection_1.createCollectionScene)()); },
+        onOpenShop: function () { return (0, manager_1.push)((0, shop_1.createShopScene)()); },
+        onOpenRank: function () { return (0, manager_1.push)((0, collection_1.createCollectionScene)({ tab: 'rank' })); },
+        onOpenSettings: function () { return (0, manager_1.push)((0, settings_1.createSettingsScene)()); }
+    });
+}
+function makeCamp2() {
+    return new camp2_1.Camp2Scene({
         onStartMatch: function () { return (0, manager_1.push)((0, match_1.createMatchScene)()); },
         onOpenDeck: function () { return (0, manager_1.push)((0, deck_1.createDeckScene)()); },
         onOpenCollection: function () { return (0, manager_1.push)((0, collection_1.createCollectionScene)()); },
@@ -80,7 +90,10 @@ function boot() {
     // 手势统一分发到当前场景
     (0, input_1.onGesture)(manager_1.gestureScene);
     // 启动画面
-    if (DEV_ENTRY === 'match') {
+    if (DEV_ENTRY === 'camp2') {
+        (0, manager_1.resetStack)(makeCamp2());
+    }
+    else if (DEV_ENTRY === 'match') {
         (0, manager_1.resetStack)((0, match_1.createMatchScene)({ seed: 20261005, difficulty: 'veteran', dev: true }));
     }
     else if (DEV_ENTRY === 'cycle') {
@@ -118,19 +131,6 @@ function boot() {
                 (0, screen_1.beginFrame)(ctx);
                 (0, manager_1.renderScene)(ctx, (0, input_1.nowMs)(), alpha);
                 (0, screen_1.endFrame)(ctx);
-                if (!probedOnce) {
-                    probedOnce = true;
-                    try {
-                        var d = ctx.getImageData(Math.floor(ctx.canvas.width / 2), Math.floor(ctx.canvas.height / 2), 1, 1).data;
-                        var d2 = ctx.getImageData(40, 40, 1, 1).data;
-                        console.log('[petbrawl] probe center=' + d[0] + ',' + d[1] + ',' + d[2] + ',' + d[3] +
-                            ' corner=' + d2[0] + ',' + d2[1] + ',' + d2[2] + ',' + d2[3] +
-                            ' canvas=' + ctx.canvas.width + 'x' + ctx.canvas.height);
-                    }
-                    catch (e2) {
-                        console.log('[petbrawl] probe failed: ' + e2);
-                    }
-                }
             }
             catch (err) {
                 if (!renderFailed) {

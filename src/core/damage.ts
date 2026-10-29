@@ -197,9 +197,12 @@ export function dealDamage(
     );
   }
 
-  // ---- 反震（荆棘之刺 / 荆棘反震）：DOT 不触发 ----
+  // ---- 反震（荆棘之刺 / §9 荆棘反震）：DOT 不触发 ----
   if (opts.secondary && attacker !== null && attacker.alive) {
     let thorns = 0;
+    // §9 装备式特技「荆棘反震」：受到伤害时反弹 30% 给攻击者
+    const equipThorns = target.equip === 'thorns';
+    if (equipThorns) thorns += TIMING.EQUIP_THORNS_PCT;
     for (let i = 0; i < target.buffs.length; i++) {
       const def = buffDefOfId(target.buffs[i]);
       if (def.thornsPct !== undefined) thorns += def.thornsPct;
@@ -208,12 +211,18 @@ export function dealDamage(
       const reflect = Math.floor(final * thorns);
       if (reflect > 0) {
         const rOpts = damageOpts(reflect);
-        rOpts.source = 'buff';
+        rOpts.source = equipThorns ? 'trait' : 'buff';
         rOpts.secondary = false;
         rOpts.event = 'UnitDamage';
         applyRawDamage(state, target, attacker, rOpts);
       }
     }
+  }
+
+  // ---- 汲取（§9 装备式特技）：造成伤害的 25% 回复自身，DOT 与反震不触发 ----
+  if (opts.secondary && attacker !== null && attacker.alive && attacker.equip === 'drain') {
+    const heal = Math.floor(final * TIMING.EQUIP_DRAIN_PCT);
+    if (heal > 0) healUnit(state, attacker, heal);
   }
 
   if (target.hp <= 0) killUnit(state, target, attacker);
@@ -258,6 +267,16 @@ export function killUnit(state: BattleState, target: Unit, killer: Unit | null):
     target.status.bleedUntil = 0;
     // 幻影不再计入存活统计的「再战」时长由 aliveMs 自然累加
     pushEvent(state, 'UnitShield', target.owner, target.id, -1, target.hp, 'buff', target.species);
+    return;
+  }
+  // §9 装备式特技「不屈」：首次死亡时以 30% 最大 HP 复活（每局一次）
+  if (!target.unyieldUsed && target.equip === 'unyield') {
+    target.unyieldUsed = true;
+    target.hp = Math.floor(target.maxHp * TIMING.EQUIP_UNYIELD_HP);
+    if (target.hp < 1) target.hp = 1;
+    target.status.bleedStacks = 0;
+    target.status.bleedUntil = 0;
+    pushEvent(state, 'UnitHeal', target.owner, target.id, -1, target.hp, 'trait', target.species);
     return;
   }
   target.alive = false;

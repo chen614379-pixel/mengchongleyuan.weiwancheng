@@ -5,7 +5,7 @@
  * 唯一允许的落点反馈是苔藓光斑 + 草叶涟漪（拖拽时也一样）。
  */
 import { LAYOUT } from '../config/layout';
-import { PALETTE, tint } from '../config/palette';
+import { PALETTE, rgba, tint } from '../config/palette';
 import { TIMING } from '../config/timing';
 import { blobPath, fillWatercolor, jitterPoints, noiseAt, strokeInk, tracePath, P } from '../ui/brush';
 import { breathe, cycle, decay } from '../ui/ease';
@@ -198,13 +198,15 @@ export function drawBoard(ctx: CanvasRenderingContext2D, time: number, opts?: { 
   if (opts && opts.fog && opts.fog > 0) drawEnemyFog(ctx, time, opts.fog);
 }
 
-/** 敌半场雾 + 树影 + ？剪影（§2.6.4）。density 0~1。 */
+/** 敌半场雾 + 树影 + ？剪影（§2.6.4）。density 0~1。
+ *  我方锚点占 rows 0..3（棋盘上半部），敌方占 rows 4..7（下半部），
+ *  所以雾必须落在棋盘下缘那条 56% 高的带子上，不能遮住自己的落点苔藓光斑。 */
 export function drawEnemyFog(ctx: CanvasRenderingContext2D, time: number, density?: number): void {
   const d = density === undefined ? 1 : Math.max(0, Math.min(1, density));
   if (d <= 0) return;
   const b = LAYOUT.BOARD;
   const x = b.x;
-  const y = b.y;
+  const y = b.y + b.h * 0.44;
   const w = b.w;
   const h = b.h * 0.56;
   ctx.save();
@@ -319,7 +321,34 @@ export function drawDeployArrow(
   ctx.restore();
 }
 
-/** 小屋 HP（§2.8 允许的矩形例外：木牌 + 圆角条）。 */
+/** 圆角矩形的点集（水彩填充/描边都用它，保证和木牌形状一致）。 */
+function roundedPts(x: number, y: number, w: number, h: number, r: number): P[] {
+  const rr = Math.max(1, Math.min(r, h / 2, w / 2));
+  const corners: [number, number, number, number][] = [
+    [x + w - rr, y + rr, -Math.PI / 2, 0],
+    [x + w - rr, y + h - rr, 0, Math.PI / 2],
+    [x + rr, y + h - rr, Math.PI / 2, Math.PI],
+    [x + rr, y + rr, Math.PI, Math.PI * 1.5],
+  ];
+  const out: P[] = [];
+  for (let c = 0; c < corners.length; c++) {
+    const cc = corners[c];
+    for (let i = 0; i <= 4; i++) {
+      const a = cc[2] + (cc[3] - cc[2]) * (i / 4);
+      out.push({ x: cc[0] + Math.cos(a) * rr, y: cc[1] + Math.sin(a) * rr });
+    }
+  }
+  return out;
+}
+
+/**
+ * 小屋 HP 牌（目标图版式：浅木圆角牌 + 深绿「HP n/m」，没有血条）。
+ * 血量越低字色越偏浆果红，仍然只靠文字传达数值。
+ *
+ * `opts.plate === false` 时只写数值、不画牌：新战斗底板上已经烘死了那块木牌
+ * （art-src/ui-board-empty-16x9-01，x 136..250 / y 670..710），这时只需要把
+ * 动态血量写在牌子正面。
+ */
 export function drawHouseHp(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -328,48 +357,25 @@ export function drawHouseHp(
   h: number,
   hp: number,
   maxHp: number,
+  opts?: { plate?: boolean },
 ): void {
   const ratio = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
-  fillWatercolor(
-    ctx,
-    [
-      { x: x, y: y },
-      { x: x + w, y: y },
-      { x: x + w, y: y + h },
-      { x: x, y: y + h },
-    ],
-    PALETTE.barkLight,
-    { alpha: 0.95, layers: 2, wetEdge: true, seedIndex: 8 },
-  );
-  woodGrain(ctx, x + 4, y + 3, w - 8, h - 6, 9);
-  strokeInk(
-    ctx,
-    [
-      { x: x, y: y },
-      { x: x + w, y: y },
-      { x: x + w, y: y + h },
-      { x: x, y: y + h },
-    ],
-    { width: 2.6, close: true, seedIndex: 10 },
-  );
-  // 轨道 + 血量（≥30% 绿，<30% 浆果红）
-  const inX = x + 6;
-  const inY = y + h * 0.52;
-  const inW = w - 12;
-  const inH = h * 0.34;
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.fillStyle = PALETTE.forestDeep;
-  ctx.beginPath();
-  ctx.rect(inX, inY, inW, inH);
-  ctx.fill();
-  ctx.restore();
-  ctx.save();
-  ctx.fillStyle = ratio < 0.3 ? PALETTE.berry : PALETTE.leafLight;
-  ctx.beginPath();
-  ctx.rect(inX + 1, inY + 1, Math.max(0, (inW - 2) * ratio), inH - 2);
-  ctx.fill();
-  ctx.restore();
+  if (opts === undefined || opts.plate !== false) {
+    const pts = roundedPts(x, y, w, h, h * 0.34);
+    fillWatercolor(ctx, pts, PALETTE.paper, { alpha: 0.98, layers: 1, wetEdge: true, seedIndex: 8 });
+    woodGrain(ctx, x + 5, y + 4, w - 10, h - 8, 9);
+    strokeInk(ctx, pts, { width: 2.4, close: true, color: PALETTE.bark, seedIndex: 10, jitter: 0.8 });
+  }
   setFont(ctx, FONT.badge, 'bold');
-  textPlain(ctx, 'HP ' + Math.round(hp) + '/' + Math.round(maxHp), x + w / 2, y + h * 0.28, FONT.badge, PALETTE.creamMist, 'center', 'bold');
+  textOutlined(
+    ctx,
+    'HP ' + Math.round(hp) + '/' + Math.round(maxHp),
+    x + w / 2,
+    y + h * 0.52,
+    FONT.badge,
+    ratio < 0.3 ? PALETTE.berry : rgba(PALETTE.forestDeep, 0.95),
+    'center',
+    2,
+    PALETTE.creamMist,
+  );
 }

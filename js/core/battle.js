@@ -89,7 +89,9 @@ function effectiveInterval(state, u) {
 function effectiveSpeed(state, u) {
     var b = weatherOf(state, u.owner);
     var s = synergyOf(state, u.owner, u.species);
-    var mul = 1 + (0, damage_1.buffMoveMul)(u) + num(b.moveMul) + s.moveMul;
+    // §9 疾行：装备式特技 +50% 移速（加算进乘区）
+    var equipMove = u.equip === 'swift' ? timing_1.TIMING.EQUIP_SWIFT_MOVE : 0;
+    var mul = 1 + (0, damage_1.buffMoveMul)(u) + num(b.moveMul) + s.moveMul + equipMove;
     var v = u.moveSpeed * (mul > 0.05 ? mul : 0.05);
     return v > 0 ? v : 0;
 }
@@ -304,6 +306,28 @@ function performAttack(state, u, target) {
         }
     }
 }
+/**
+ * §9 嘲讽：返回 1.5 单位内最近的嘲讽者（没有则 null）。
+ * 嘲讽是装备式特技（`u.equip === 'taunt'`），与种族特技无关。
+ */
+function nearestTaunter(state, u) {
+    var enemies = (0, setup_1.fieldUnits)(state, (0, setup_1.otherFaction)(u.owner));
+    var best = null;
+    var bestD = 0;
+    for (var i = 0; i < enemies.length; i++) {
+        var e = enemies[i];
+        if (!e.alive || e.equip !== 'taunt')
+            continue;
+        var d = unitDist(u, e);
+        if (d > timing_1.TIMING.EQUIP_TAUNT_RANGE)
+            continue;
+        if (best === null || d < bestD) {
+            best = e;
+            bestD = d;
+        }
+    }
+    return best;
+}
 /** 索敌：指挥目标 > 正对 > 最低 HP（偷袭/猎手本能）> 被自己克制 > 最近 > 推进敌方半场。 */
 function recalcTarget(state, u) {
     if (u.forcedTargetId >= 0) {
@@ -313,6 +337,12 @@ function recalcTarget(state, u) {
             return;
         }
         u.forcedTargetId = -1;
+    }
+    // §9 嘲讽：1.5 单位内的嘲讽者强制吸引（优先级高于镜像对手与打分）
+    var taunter = nearestTaunter(state, u);
+    if (taunter !== null) {
+        u.targetId = taunter.id;
+        return;
     }
     var enemies = (0, setup_1.fieldUnits)(state, (0, setup_1.otherFaction)(u.owner));
     if (u.mirrorId >= 0) {
@@ -652,7 +682,8 @@ function prepareBattle(state) {
             var u = units[i];
             var s = synergyOf(state, faction, u.species);
             var mul = 1 + num(b.hpMaxMul) + s.hpMaxMul;
-            var newMax = Math.floor(u.baseMaxHp * mul);
+            // baseMaxHp 存的是 1 级裸值，等级倍率必须显式乘回来（否则二合一的 L2/L3 数值会被抹掉）
+            var newMax = Math.floor(u.baseMaxHp * (0, setup_1.levelMultiplier)(u.level) * mul);
             var wasFull = u.hp >= u.maxHp;
             if (wasFull)
                 u.hp = newMax;

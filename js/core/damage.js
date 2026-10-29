@@ -183,9 +183,13 @@ function dealDamage(state, attacker, target, opts) {
     else {
         (0, setup_1.pushEvent)(state, 'UnitDamage', attacker === null ? null : attacker.owner, attacker === null ? -1 : attacker.id, target.id, final, opts.source, attacker === null ? null : attacker.species);
     }
-    // ---- 反震（荆棘之刺 / 荆棘反震）：DOT 不触发 ----
+    // ---- 反震（荆棘之刺 / §9 荆棘反震）：DOT 不触发 ----
     if (opts.secondary && attacker !== null && attacker.alive) {
         var thorns = 0;
+        // §9 装备式特技「荆棘反震」：受到伤害时反弹 30% 给攻击者
+        var equipThorns = target.equip === 'thorns';
+        if (equipThorns)
+            thorns += timing_1.TIMING.EQUIP_THORNS_PCT;
         for (var i = 0; i < target.buffs.length; i++) {
             var def = buffDefOfId(target.buffs[i]);
             if (def.thornsPct !== undefined)
@@ -195,12 +199,18 @@ function dealDamage(state, attacker, target, opts) {
             var reflect = Math.floor(final * thorns);
             if (reflect > 0) {
                 var rOpts = damageOpts(reflect);
-                rOpts.source = 'buff';
+                rOpts.source = equipThorns ? 'trait' : 'buff';
                 rOpts.secondary = false;
                 rOpts.event = 'UnitDamage';
                 applyRawDamage(state, target, attacker, rOpts);
             }
         }
+    }
+    // ---- 汲取（§9 装备式特技）：造成伤害的 25% 回复自身，DOT 与反震不触发 ----
+    if (opts.secondary && attacker !== null && attacker.alive && attacker.equip === 'drain') {
+        var heal = Math.floor(final * timing_1.TIMING.EQUIP_DRAIN_PCT);
+        if (heal > 0)
+            healUnit(state, attacker, heal);
     }
     if (target.hp <= 0)
         killUnit(state, target, attacker);
@@ -238,6 +248,17 @@ function killUnit(state, target, killer) {
         target.status.bleedUntil = 0;
         // 幻影不再计入存活统计的「再战」时长由 aliveMs 自然累加
         (0, setup_1.pushEvent)(state, 'UnitShield', target.owner, target.id, -1, target.hp, 'buff', target.species);
+        return;
+    }
+    // §9 装备式特技「不屈」：首次死亡时以 30% 最大 HP 复活（每局一次）
+    if (!target.unyieldUsed && target.equip === 'unyield') {
+        target.unyieldUsed = true;
+        target.hp = Math.floor(target.maxHp * timing_1.TIMING.EQUIP_UNYIELD_HP);
+        if (target.hp < 1)
+            target.hp = 1;
+        target.status.bleedStacks = 0;
+        target.status.bleedUntil = 0;
+        (0, setup_1.pushEvent)(state, 'UnitHeal', target.owner, target.id, -1, target.hp, 'trait', target.species);
         return;
     }
     target.alive = false;

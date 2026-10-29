@@ -72,6 +72,12 @@ exports.TIMING = {
     TRAIT_CLAW_THRESHOLD: 0.30,
     TRAIT_CLAW_MULT: 2.0,
     TRAIT_AMBUSH_IGNORE_REDUCE: 0.20,
+    /** §9 装备式特技（布阵阶段装备，每只动物 1 槽） */
+    EQUIP_THORNS_PCT: 0.30,
+    EQUIP_SWIFT_MOVE: 0.50,
+    EQUIP_DRAIN_PCT: 0.25,
+    EQUIP_UNYIELD_HP: 0.30,
+    EQUIP_TAUNT_RANGE: 1.5,
     /** 结算/机制常数 */
     COUNTER_BONUS: 1.5,
     COUNTERED_PENALTY: 0.75,

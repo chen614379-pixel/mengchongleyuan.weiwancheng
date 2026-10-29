@@ -197,39 +197,39 @@ function drawPanelBush(ctx, x, y, rx, ry, color, seedIndex) {
         });
     }
 }
-/** 面板纸底 + 两侧森林边缘（所有面板页的背景）。 */
+/** 面板纸底 + 两侧森林边缘（所有面板页的背景）。
+ *  自适应全屏：纸面板只铺设计基准框 1280×720（+24 出血），屏幕外扩出来的部分露出森林，
+ *  边缘装饰也一律锚在基准框上 —— 否则阔屏会把程序化树推到屏幕最外圈、变成硬边深绿色块。 */
 function drawScreenBase(ctx, t, seedIndex) {
-    // 自适应全屏：纸底与边缘装饰铺满逻辑可视区，中央 1280×720 的排布完全不动
     var box = (0, screen_1.sceneBox)();
-    var bx = box.x;
-    var by = box.y;
-    var bw = box.w;
-    var bh = box.h;
+    var W = layout_1.LAYOUT.SCREEN_W;
+    var H = layout_1.LAYOUT.SCREEN_H;
     ctx.save();
+    // 1) 满屏森林底：用营地阔图（1664×720，中央 1280 与设计基准逐像素对齐）
     ctx.fillStyle = palette_1.PALETTE.creamMist;
-    ctx.fillRect(bx, by, bw, bh);
-    (0, paint_1.paperBase)(ctx, bx - 24, by - 24, bw + 48, bh + 48, palette_1.PALETTE.paper, 0.95, seedIndex);
-    (0, brush_1.paperGrain)(ctx, bx, by, bw, bh, 0.045, seedIndex + 1);
-    // 远景树（左右各两株，只在边缘露出，不侵入中央内容区）
-    var swayA = Math.sin(t / 2600) * 2.2;
-    drawPanelTree(ctx, bx - 26, 640, 560, palette_1.PALETTE.forestMid, seedIndex + 10, swayA);
-    drawPanelTree(ctx, bx + 88, 600, 380, palette_1.PALETTE.forestDeep, seedIndex + 14, -swayA);
-    drawPanelTree(ctx, bx + bw + 20, 660, 600, palette_1.PALETTE.forestMid, seedIndex + 18, -swayA);
-    drawPanelTree(ctx, bx + bw - 92, 596, 360, palette_1.PALETTE.forestDeep, seedIndex + 22, swayA);
-    // 近景灌木 / 蕨叶 / 草
-    drawPanelBush(ctx, bx + 26, 700, 116, 52, palette_1.PALETTE.leafMid, seedIndex + 26);
-    drawPanelBush(ctx, bx + bw - 30, 706, 124, 56, palette_1.PALETTE.leafMid, seedIndex + 30);
-    (0, paint_1.drawFern)(ctx, bx + 34, 706, 66, -0.5, palette_1.PALETTE.leafLight, seedIndex + 34);
-    (0, paint_1.drawFern)(ctx, bx + bw - 40, 710, 70, -2.6, palette_1.PALETTE.leafLight, seedIndex + 38);
-    var tufts = Math.ceil(bw / 158) + 1;
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    var forest = (0, assets_1.getImage)('bg-camp');
+    if (forest)
+        (0, screen_1.drawPlateCover)(ctx, forest, 0, 0, W, H);
+    // 2) 纸面板（基准框 + 24px 出血），边缘压一道木色描边当作纸页裁边
+    (0, paint_1.paperBase)(ctx, -24, -24, W + 48, H + 48, palette_1.PALETTE.paper, 1, seedIndex);
+    (0, brush_1.paperGrain)(ctx, 0, 0, W, H, 0.045, seedIndex + 1);
+    (0, brush_1.strokeInk)(ctx, [
+        { x: -24, y: -24 }, { x: W + 24, y: -24 }, { x: W + 24, y: H + 24 }, { x: -24, y: H + 24 },
+    ], { width: 3, close: true, color: (0, palette_1.rgba)(palette_1.PALETTE.bark, 0.55), seedIndex: seedIndex + 3 });
+    // 边缘装饰一律锚在基准框上；大株程序化树/灌木已删掉（阔屏下会变成硬边色块），
+    // 边框交给满屏森林底图，这里只留贴着纸边的小蕨叶与草。
+    (0, paint_1.drawFern)(ctx, 34, 706, 66, -0.5, palette_1.PALETTE.leafLight, seedIndex + 34);
+    (0, paint_1.drawFern)(ctx, W - 40, 710, 70, -2.6, palette_1.PALETTE.leafLight, seedIndex + 38);
+    var tufts = Math.ceil(W / 158) + 1;
     for (var i = 0; i < tufts; i++) {
-        var gx = bx + 8 + i * 158;
+        var gx = 8 + i * 158;
         (0, paint_1.drawGrassTuft)(ctx, gx, 718, 22 + (i % 3) * 7, palette_1.PALETTE.leafMid, seedIndex + 42 + i, Math.sin(t / 1500 + i));
     }
     // 叶隙光斑（§2.1 常驻闲笔）
     for (var i = 0; i < 6; i++) {
         var ph = (t / (6200 + i * 900) + i * 0.21) % 1;
-        (0, paint_1.drawSunMote)(ctx, bx + 40 + i * ((bw - 80) / 6), 96 + ph * 300, 10 + (i % 3) * 5, 0.09 * (1 - ph));
+        (0, paint_1.drawSunMote)(ctx, 40 + i * ((W - 80) / 6), 96 + ph * 300, 10 + (i % 3) * 5, 0.09 * (1 - ph));
     }
     ctx.restore();
 }

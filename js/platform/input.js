@@ -14,7 +14,7 @@ var wx_shim_1 = require("./wx-shim");
 var screen_1 = require("./screen");
 var timing_1 = require("../config/timing");
 var state = {
-    down: false, dragging: false, x: 0, y: 0, downX: 0, downY: 0, downAt: 0,
+    down: false, dragging: false, x: 0, y: 0, downX: 0, downY: 0, heldMs: 0,
     moved: false, longPressFired: false
 };
 var listeners = [];
@@ -28,7 +28,10 @@ function emit(e) {
 }
 /** 每帧调用（传入逻辑时间 ms），负责把「按住不动」升级为 dragStart。 */
 function updateInput(now) {
-    if (state.down && !state.dragging && !state.longPressFired && now - state.downAt >= timing_1.TIMING.LONG_PRESS) {
+    if (!state.down || state.dragging || state.longPressFired)
+        return;
+    state.heldMs += timing_1.TIMING.LOGIC_DT;
+    if (state.heldMs >= timing_1.TIMING.LONG_PRESS) {
         state.longPressFired = true;
         state.dragging = true;
         emit({ type: 'dragStart', x: state.x, y: state.y, t: now });
@@ -54,7 +57,7 @@ function bindInput() {
         state.y = p.y;
         state.downX = p.x;
         state.downY = p.y;
-        state.downAt = t;
+        state.heldMs = 0;
         emit({ type: 'down', x: p.x, y: p.y, t: t });
     };
     var move = function (cssX, cssY, t) {
@@ -78,12 +81,13 @@ function bindInput() {
     };
     var up = function (cssX, cssY, t) {
         var p = (0, screen_1.toLogical)(cssX, cssY);
-        var duration = t - state.downAt;
+        var duration = state.heldMs;
         var wasDrag = state.dragging;
         emit({ type: 'up', x: p.x, y: p.y, t: t, wasDrag: wasDrag, duration: duration });
         state.down = false;
         state.dragging = false;
         state.longPressFired = false;
+        state.heldMs = 0;
     };
     wx_shim_1.WX.onTouchStart(function (res) {
         if (!res.touches || res.touches.length === 0)
@@ -106,6 +110,7 @@ function bindInput() {
             emit({ type: 'cancel', x: state.x, y: state.y, t: res.timeStamp || nowMs() });
             state.down = false;
             state.dragging = false;
+            state.heldMs = 0;
         });
     }
     // 开发者工具里也可用鼠标调试

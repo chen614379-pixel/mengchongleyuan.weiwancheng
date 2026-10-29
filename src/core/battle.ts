@@ -34,6 +34,7 @@ import {
   PX_PER_UNIT,
   beginContinuous,
   fieldUnits,
+  levelMultiplier,
   otherFaction,
   pushEvent,
   side,
@@ -118,7 +119,9 @@ function effectiveInterval(state: BattleState, u: Unit): number {
 function effectiveSpeed(state: BattleState, u: Unit): number {
   const b = weatherOf(state, u.owner);
   const s = synergyOf(state, u.owner, u.species);
-  const mul = 1 + buffMoveMul(u) + num(b.moveMul) + s.moveMul;
+  // §9 疾行：装备式特技 +50% 移速（加算进乘区）
+  const equipMove = u.equip === 'swift' ? TIMING.EQUIP_SWIFT_MOVE : 0;
+  const mul = 1 + buffMoveMul(u) + num(b.moveMul) + s.moveMul + equipMove;
   const v = u.moveSpeed * (mul > 0.05 ? mul : 0.05);
   return v > 0 ? v : 0;
 }
@@ -350,6 +353,27 @@ function performAttack(state: BattleState, u: Unit, target: Unit): void {
   }
 }
 
+/**
+ * §9 嘲讽：返回 1.5 单位内最近的嘲讽者（没有则 null）。
+ * 嘲讽是装备式特技（`u.equip === 'taunt'`），与种族特技无关。
+ */
+function nearestTaunter(state: BattleState, u: Unit): Unit | null {
+  const enemies = fieldUnits(state, otherFaction(u.owner));
+  let best: Unit | null = null;
+  let bestD = 0;
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (!e.alive || e.equip !== 'taunt') continue;
+    const d = unitDist(u, e);
+    if (d > TIMING.EQUIP_TAUNT_RANGE) continue;
+    if (best === null || d < bestD) {
+      best = e;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 /** 索敌：指挥目标 > 正对 > 最低 HP（偷袭/猎手本能）> 被自己克制 > 最近 > 推进敌方半场。 */
 function recalcTarget(state: BattleState, u: Unit): void {
   if (u.forcedTargetId >= 0) {
@@ -359,6 +383,12 @@ function recalcTarget(state: BattleState, u: Unit): void {
       return;
     }
     u.forcedTargetId = -1;
+  }
+  // §9 嘲讽：1.5 单位内的嘲讽者强制吸引（优先级高于镜像对手与打分）
+  const taunter = nearestTaunter(state, u);
+  if (taunter !== null) {
+    u.targetId = taunter.id;
+    return;
   }
   const enemies = fieldUnits(state, otherFaction(u.owner));
   if (u.mirrorId >= 0) {
@@ -675,7 +705,8 @@ export function prepareBattle(state: BattleState): void {
       const u = units[i];
       const s = synergyOf(state, faction, u.species);
       const mul = 1 + num(b.hpMaxMul) + s.hpMaxMul;
-      const newMax = Math.floor(u.baseMaxHp * mul);
+      // baseMaxHp 存的是 1 级裸值，等级倍率必须显式乘回来（否则二合一的 L2/L3 数值会被抹掉）
+      const newMax = Math.floor(u.baseMaxHp * levelMultiplier(u.level) * mul);
       const wasFull = u.hp >= u.maxHp;
       if (wasFull) u.hp = newMax;
       else if (u.maxHp > 0) u.hp = Math.min(newMax, Math.floor((u.hp * newMax) / u.maxHp));

@@ -328,6 +328,10 @@ function createUnit(state, owner, species, level, invested) {
         decoyUntil: 0,
         decoyUsed: false,
         isDecoy: false,
+        // §9 装备式特技：开局未装备、未选定目标物种、不屈未用
+        equip: null,
+        equipSpecies: null,
+        unyieldUsed: false,
         mirrorId: -1,
         pushPos: { x: 0, y: 0 },
         bleedSource: 'trait',
@@ -545,17 +549,18 @@ function beginContinuous(state) {
         }
     }
 }
-/** 战斗结束后把天气 HP 上限乘区还原为裸值。 */
+/** 战斗结束后把天气 HP 上限乘区还原为裸值（裸值 = 1 级基础 × 等级倍率）。 */
 function restoreBaseStats(state) {
     var factions = ['player', 'enemy'];
     for (var f = 0; f < factions.length; f++) {
         var units = side(state, factions[f]).units;
         for (var i = 0; i < units.length; i++) {
             var u = units[i];
-            u.maxHp = u.baseMaxHp;
+            var mult = levelMultiplier(u.level);
+            u.maxHp = Math.floor(u.baseMaxHp * mult);
             if (u.hp > u.maxHp)
                 u.hp = u.maxHp;
-            u.atk = u.baseAtk;
+            u.atk = Math.floor(u.baseAtk * mult);
         }
     }
 }

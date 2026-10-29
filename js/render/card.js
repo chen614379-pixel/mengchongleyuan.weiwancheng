@@ -26,6 +26,15 @@ var assets_1 = require("./assets");
 var unit_1 = require("./unit");
 var forest_1 = require("./forest");
 var TAU = Math.PI * 2;
+/**
+ * 名称木牌的统一参考文本（提示词 P2-⑱「卡牌标题木牌字号统一」）。
+ *
+ * 卡名长度差异极大：物种名只有 1 个字（象/狮/虎…），天气名是 6 个字（晴 · 林间光），
+ * 卡牌名 4 个字（锋锐之爪）。若逐张用 `fitSize(card.cn, …)`，短名会顶格画到 28px、
+ * 长名被压到 20px，同一排卡片的标题大小参差不齐。
+ * 这里固定用“常规名里最宽的一条”当参考来定字号，所有标题就都一样大了。
+ */
+var CARD_NAME_REF = '晴 · 林间光';
 /** 卡牌基准尺寸（与 LAYOUT.CARD 同步）。 */
 function cardSize() {
     return { w: layout_1.LAYOUT.CARD.w, h: layout_1.LAYOUT.CARD.h };
@@ -375,12 +384,21 @@ function drawArtCardFace(ctx, card, x, y, w, h, img, o, seed, time) {
  */
 function drawWeatherCardFace(ctx, card, x, y, w, h, img, o, seed, time) {
     var u = w / layout_1.LAYOUT.CARD.w;
+    /**
+     * 纵向单位：**与横向单位分开**。
+     *
+     * 集市卡位要把卡牌铺满底板烘死的样例卡（176..549，高 373），而卡面原生高 232，
+     * 于是 h ≠ LAYOUT.CARD.h。所有「y + K」的排版必须跟 h 一起放大（v = h/232），
+     * 否则美术区、名称木牌、两行效果会全部挤在卡片上半部、下半张只剩空白木底。
+     * 字号仍按 u（宽度单位）算，避免文字被纵向拉长。
+     */
+    var v = h / layout_1.LAYOUT.CARD.h;
     var affordable = o.affordable === undefined ? true : o.affordable;
     var radius = layout_1.LAYOUT.CARD.radius * u;
     var artX = x + 8 * u;
-    var artY = y + 8 * u;
+    var artY = y + 8 * v;
     var artW = w - 16 * u;
-    var artH = 142 * u;
+    var artH = 142 * v;
     // 木框底
     (0, paint_1.paperBase)(ctx, x, y, w, h, palette_1.PALETTE.barkLight, 0.98, seed);
     (0, paint_1.woodGrain)(ctx, x, y, w, h, seed + 1);
@@ -401,25 +419,50 @@ function drawWeatherCardFace(ctx, card, x, y, w, h, img, o, seed, time) {
     ctx.restore();
     (0, brush_1.strokeInk)(ctx, artPts, { width: 2.4 * u, close: true, seedIndex: seed + 3, jitter: 0.9 });
     // 费用太阳牌
-    drawCostCoin(ctx, x + 26 * u, y + 28 * u, 21 * u, card.cost, time, o.pressed === true && !affordable);
+    drawCostCoin(ctx, x + 26 * u, y + 28 * v, 21 * u, card.cost, time, o.pressed === true && !affordable);
     // 名称木牌
     var nameX = x + 14 * u;
-    var nameY = y + 154 * u;
+    var nameY = y + 154 * v;
     var nameW = w - 28 * u;
     var nameH = 26 * u;
     var nameBar = rectPts(nameX, nameY, nameW, nameH);
     (0, brush_1.fillWatercolor)(ctx, nameBar, palette_1.PALETTE.barkLight, { alpha: 0.98, layers: 1, wetEdge: true, seedIndex: seed + 30 });
     (0, paint_1.woodGrain)(ctx, nameX, nameY, nameW, nameH, seed + 31);
     (0, brush_1.strokeInk)(ctx, nameBar, { width: 2.6 * u, close: true, seedIndex: seed + 32, jitter: 0.9 });
-    var nameSize = (0, theme_1.fitSize)(ctx, card.cn, nameW - 22 * u, layout_1.LAYOUT.FONT.cardName, layout_1.LAYOUT.FONT.badge);
-    (0, theme_1.textPlain)(ctx, card.cn, x + w / 2, nameY + nameH * 0.74, nameSize, palette_1.PALETTE.inkSoft, 'center');
-    // 两行效果（实时取自配置）——基线写死，保证无论缩放都不出卡
+    // 名称木牌（字号统一，提示词 P2-⑱）：
+    // 原实现是 fitSize(card.cn, ...)，于是「象」这种单字物种按 28px 顶格画，
+    // 「晴 · 林间光」这类长名被逐级缩小，同一排卡片的标题字号参差不齐。
+    // 改为**用同一条参考文本测一次字号**：参考文本取常规最宽的一条（天气名是 6 字），
+    // 所有标题都按它决定的大小绘制，于是并排的卡牌标题字号完全一致；
+    // 只有极端的组合天气名（如「晴 · 林间光 / 雨 · 骤雨」）才继续单独缩小。
+    // 统一字号：常规名一律按参考宽度定字号；只有比参考还宽的极端名（组合天气）
+    // 才在该字号基础上再缩一档，避免溢出木牌。
+    var nameBudget = nameW - 22 * u;
+    var nameSize = (0, theme_1.fitSize)(ctx, CARD_NAME_REF, nameBudget, layout_1.LAYOUT.FONT.cardName, layout_1.LAYOUT.FONT.badge);
+    var drawSize = (0, theme_1.measure)(ctx, card.cn, nameSize, 'bold') > nameBudget
+        ? (0, theme_1.fitSize)(ctx, card.cn, nameBudget, nameSize, layout_1.LAYOUT.FONT.badge)
+        : nameSize;
+    (0, theme_1.textPlain)(ctx, card.cn, x + w / 2, nameY + nameH * 0.74, drawSize, palette_1.PALETTE.inkSoft, 'center');
+    // 三段式信息（提示词 P2-⑯）：图标（美术区）→ 标题（名称木牌）→ 效果（两行），
+    // 三者必须完整可见。原文案基线写死在 y+203u / y+224u，而卡高 232，
+    // 第二行几乎压在卡底描边上、还会被木框的下沿吃掉；这里上移并留出底部边距，
+    // 让两行效果稳定落在卡内、且与名称木牌（y+154u..180u）之间不挤。
     var lines = weatherLines(card);
     var fsize = Math.max(11, Math.round(16.5 * u));
+    var lineY1 = y + 198 * v;
+    var lineY2 = y + 219 * v;
+    // 红字（莓红）压在木纹上对比度不够（提示词 P2-⑰）：给敌方那一行垫一条
+    // 半透明奶油底条，字号也用不小于卡牌其他数据文字的尺寸。
+    var padX = 11 * u;
+    var padH = 20 * u;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    (0, brush_1.fillWatercolor)(ctx, rectPts(x + padX, lineY2 - padH * 0.72, w - padX * 2, padH), palette_1.PALETTE.creamMist, { alpha: 0.9, layers: 1, seedIndex: seed + 41 });
+    ctx.restore();
     var s1 = (0, theme_1.fitSize)(ctx, lines[0], w - 30 * u, fsize, 10);
-    (0, theme_1.textPlain)(ctx, lines[0], x + 15 * u, y + 203 * u, s1, palette_1.PALETTE.forestMid, 'left');
+    (0, theme_1.textPlain)(ctx, lines[0], x + 15 * u, lineY1, s1, palette_1.PALETTE.forestMid, 'left');
     var s2 = (0, theme_1.fitSize)(ctx, lines[1], w - 30 * u, fsize, 10);
-    (0, theme_1.textPlain)(ctx, lines[1], x + 15 * u, y + 224 * u, s2, palette_1.PALETTE.berry, 'left');
+    (0, theme_1.textPlain)(ctx, lines[1], x + 15 * u, lineY2, s2, palette_1.PALETTE.berry, 'left');
     // 不可购买：灰雾 + 红框闪
     if (!affordable) {
         ctx.save();
@@ -442,8 +485,8 @@ function drawCard(ctx, card, x, y, opts) {
     var time = o.time === undefined ? 0 : o.time;
     var scale = o.scale === undefined ? 1 : o.scale;
     var alpha = o.alpha === undefined ? 1 : o.alpha;
-    var w = layout_1.LAYOUT.CARD.w;
-    var h = layout_1.LAYOUT.CARD.h;
+    var w = o.w === undefined ? layout_1.LAYOUT.CARD.w : o.w;
+    var h = o.h === undefined ? layout_1.LAYOUT.CARD.h : o.h;
     var r = layout_1.LAYOUT.CARD.radius;
     var affordable = o.affordable === undefined ? true : o.affordable;
     var seed = (card.species ? card.species.length : 1) * 17 + (card.cost * 7) + (card.cn.length * 3);

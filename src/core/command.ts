@@ -2,6 +2,8 @@
  * 指令系统（§1 硬约束：玩家与 AI 产出同一种 Command，经 CommandQueue 生效，AI 无特权通道）。
  */
 import { Faction } from './types';
+import { EquipTraitId } from '../config/traits';
+import { SpeciesId } from '../config/species';
 
 export type Command =
   /** 布阵阶段：把替补席 unitId 放到 anchor 锚点 */
@@ -26,6 +28,11 @@ export type Command =
   | { type: 'EquipBuff'; faction: Faction; cardId: number; unitId: number }
   /** 详情页：卸下某张加成牌（不退款） */
   | { type: 'RemoveBuff'; faction: Faction; unitId: number; buffIndex: number }
+  /**
+   * §9 装备式特技：给 unitId 装上/换装（trait=null 表示卸下）。
+   * species 只对「借力模仿 / 共生血条 / 拟态伪装」有意义，其余传 null。
+   */
+  | { type: 'EquipTrait'; faction: Faction; unitId: number; trait: EquipTraitId | null; species: SpeciesId | null }
   /** 布阵确认（到点自动确认也会下发一次） */
   | { type: 'ConfirmDeploy'; faction: Faction };
 

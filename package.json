@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -w -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
     "headless": "node tools/headless.js"
   },
   "devDependencies": {

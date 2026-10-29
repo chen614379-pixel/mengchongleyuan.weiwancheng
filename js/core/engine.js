@@ -17,10 +17,12 @@ exports.phaseLeftOf = phaseLeftOf;
  */
 var economy_1 = require("../config/economy");
 var species_1 = require("../config/species");
+var traits_1 = require("../config/traits");
 var timing_1 = require("../config/timing");
 var weather_1 = require("../config/weather");
 var ai_1 = require("./ai");
 var battle_1 = require("./battle");
+var equip_1 = require("./equip");
 var setup_1 = require("./setup");
 var shop_1 = require("./shop");
 function reject(reason) {
@@ -69,6 +71,9 @@ function applyDeploy(state, cmd) {
     u.pos.x = c.x;
     u.pos.y = c.y;
     s.units.push(u);
+    // §9：装备的属性改写（借力模仿 / 共生血条 / 拟态伪装）在场上才真正生效
+    if (u.equip !== null)
+        (0, equip_1.applyEquipAttributes)(u);
     (0, setup_1.pushEvent)(state, 'UnitDeploy', cmd.faction, u.id, -1, 0, null, u.species);
     return { ok: true, fx: 'card-fly' };
 }
@@ -123,6 +128,24 @@ function refreshStats(u) {
     u.maxHp = Math.floor(u.baseMaxHp * mult);
     u.atk = Math.floor(u.baseAtk * mult);
 }
+/**
+ * §9 装备式特技：布阵/集市阶段给单位装备（或换装/卸下）一条特技。
+ * 属性改写（借力模仿 / 共生血条 / 拟态伪装）在 equip.ts 里立即生效；
+ * 其余五条是纯被动，由 battle.ts / damage.ts 读取 `u.equip` 结算。
+ */
+function applyEquipTrait(state, cmd) {
+    if (state.phase !== 'deploy' && state.phase !== 'market')
+        return reject('bad-phase');
+    var u = (0, setup_1.unitById)(state, cmd.unitId);
+    if (u === null || u.owner !== cmd.faction || !u.alive)
+        return reject('no-such-unit');
+    if (cmd.trait !== null && !(0, traits_1.isEquipTraitId)(cmd.trait))
+        return reject('bad-trait');
+    if (cmd.trait !== null && (0, traits_1.equipNeedsSpecies)(cmd.trait) && cmd.species === null)
+        return reject('needs-species');
+    (0, equip_1.equipTrait)(u, cmd.trait, cmd.species);
+    return { ok: true, fx: 'buff-wrap' };
+}
 function applyCombine(state, cmd) {
     if (state.phase !== 'deploy' && state.phase !== 'market')
         return reject('bad-phase');
@@ -152,6 +175,9 @@ function applyCombine(state, cmd) {
     survivor.level = (survivor.level + 1);
     survivor.invested = survivor.invested + eaten.invested;
     refreshStats(survivor);
+    // §9：升级后重算装备改写（借力模仿的攻击力随等级倍率走，共生血条按新等级上限）
+    if (survivor.equip !== null)
+        (0, equip_1.applyEquipAttributes)(survivor);
     survivor.hp = survivor.maxHp;
     survivor.fx.combineBloom = 1;
     eaten.alive = false;
@@ -211,6 +237,8 @@ function applyCommand(state, cmd, by) {
             return (0, shop_1.applyEquipBuff)(state, cmd.faction, cmd.cardId, cmd.unitId);
         case 'RemoveBuff':
             return (0, shop_1.applyRemoveBuff)(state, cmd.faction, cmd.unitId, cmd.buffIndex);
+        case 'EquipTrait':
+            return applyEquipTrait(state, cmd);
         case 'ConfirmDeploy': {
             var s = (0, setup_1.side)(state, cmd.faction);
             s.deployed = true;

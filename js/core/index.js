@@ -1,8 +1,4 @@
 "use strict";
-/**
- * barrel：core 的公开入口（场景层/无头自检都从这里 require）。
- * 除 core 各模块外，一并 re-export 配置里的类型与常量，避免上层再写相对路径。
- */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -19,6 +15,10 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.tint = exports.rgba = exports.HP_RING_COLOR = exports.FACTION_COLOR = exports.PALETTE = exports.anchorToPixel = exports.LAYOUT = exports.weatherDef = exports.resolveWeather = exports.WEATHER_COMBOS = exports.WEATHER_CARDS = exports.PLAYER_ROWS = exports.PLAYER_COLS = exports.GRID_ROWS = exports.GRID_COLS = exports.TIMING = exports.buffDef = exports.CARD_FLY_MS = exports.SHELF_SLOTS = exports.SPECIES_BIAS = exports.POOL_SHARE = exports.TRAIT_SLOTS = exports.BUFF_SLOTS = exports.BUFF_CARDS = exports.interestOf = exports.sellValue = exports.roundDamage = exports.tierTableForRound = exports.TIER_TABLE = exports.ECONOMY = exports.deployCapOfRound = exports.SPECIES_THEME = exports.BENCH_SLOTS = exports.LEVEL_DECOS = exports.LEVEL_MULT = exports.counteredBy = exports.COUNTER = exports.SPECIES_ORDER = exports.SPECIES = void 0;
+/**
+ * barrel：core 的公开入口（场景层/无头自检都从这里 require）。
+ * 除 core 各模块外，一并 re-export 配置里的类型与常量，避免上层再写相对路径。
+ */
 __exportStar(require("./types"), exports);
 __exportStar(require("./command"), exports);
 __exportStar(require("./rng"), exports);

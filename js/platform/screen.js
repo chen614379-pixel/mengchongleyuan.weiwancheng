@@ -14,23 +14,27 @@ exports.toScreen = toScreen;
 /**
  * 屏幕适配（§1：横屏基准 1280×720）。
  *
- * 自适应全屏策略（不用 letterbox 黑边、也不拉伸中央内容）：
- *   逻辑可视区 = 1280×720 按屏幕宽高比「等比外扩」得到（更宽的屏左右变宽、更窄的屏上下变高），
- *   缩放 scale = cssW / logicalW（等比，永远不变形，也永远不裁切）。
- *   场景代码仍然使用 0..1280 / 0..720 的坐标，画布变换里统一平移 padX / padY 使内容保持居中；
- *   留边区域由「阔图底板」补满：底板宽 1664×720，中央 1280×720 与设计基准逐像素对齐，
- *   左右多出的 192px 是 AI 续画的同一张风景（见 drawPlateCover）。
- *   渲染时底板**永远 1:1 居中**（scale 恒为 1），所以烘焙进底图的招牌/卡位/货币位
- *   与代码里的命中区始终重合；只有屏幕比阔图还宽/还高时，才用镜像边缘条补最外圈。
- *   这样既没有黑边，又不会让烘焙在底板里的元素与命中区错位。
+ * 自适应全屏策略（没有 letterbox 黑边、没有裁切、四周不留白边）：
+ *   竖向严格按屏幕高度铺满（scaleY = cssH / 720），横向把设计基准 1280 按屏宽**拉伸**铺满
+ *   （scaleX = scaleY × 拉伸系数，拉伸系数 = 屏幕宽高比 / 16:9，上限 MAX_STRETCH）。
+ *   这样 1280×720 的设计框正好覆盖整块屏幕：烘焙在底板里的招牌、卡位、按钮、
+ *   饲养员、狗屋、替补席苔藓垫都贴着真实屏幕边缘，代码里的动态层按同一坐标系绘制，
+ *   与烘焙元素天然重合（padX/padY 在常见比例下恒为 0，`sideOut()` 也就恒为 0）。
+ *   横向拉伸在 16:9 上为 1.00、在 19.5:9 手机上约 1.22 —— 手绘水彩画面里几乎看不出，
+ *   换来的是「内容主动填满可用宽度」而不是两侧各留一条空背景。
+ *   超过上限的极宽屏（>21:9）才把多出来的几像素交给阔图底板自带的 ±192px 续画覆盖，
+ *   实在还不够时 drawPlateCover 会用镜像边缘条补最外圈（1:1 取图内窄条，接缝像素连续）。
+ *   底板中央 1280×720 与设计基准逐像素对齐，所以烘焙元素永远不会和命中区错位。
  */
 var wx_shim_1 = require("./wx-shim");
 var layout_1 = require("../config/layout");
 var palette_1 = require("../config/palette");
+/** 横向拉伸上限：超过它的极宽屏才用阔图/镜像补边。 */
+var MAX_STRETCH = 1.3;
 var viewport = {
     canvasW: layout_1.LAYOUT.SCREEN_W, canvasH: layout_1.LAYOUT.SCREEN_H,
     cssW: layout_1.LAYOUT.SCREEN_W, cssH: layout_1.LAYOUT.SCREEN_H,
-    dpr: 1, scale: 1, offsetX: 0, offsetY: 0,
+    dpr: 1, scale: 1, scaleX: 1, offsetX: 0, offsetY: 0,
     logicalW: layout_1.LAYOUT.SCREEN_W, logicalH: layout_1.LAYOUT.SCREEN_H, padX: 0, padY: 0
 };
 var lastCanvas = null;
@@ -55,16 +59,18 @@ function applyViewport(cv) {
         cssW = layout_1.LAYOUT.SCREEN_W;
         cssH = layout_1.LAYOUT.SCREEN_H;
     }
-    // 等比外扩：屏幕比 16:9 宽就加宽逻辑区，比 16:9 窄就加高逻辑区
+    // 铺满屏幕：竖向按高度，横向把设计基准 1280 拉伸到屏宽（上限 MAX_STRETCH）
     var baseW = layout_1.LAYOUT.SCREEN_W;
     var baseH = layout_1.LAYOUT.SCREEN_H;
     var aspect = cssW / cssH;
-    var baseAspect = baseW / baseH;
-    var logicalW = aspect > baseAspect ? baseH * aspect : baseW;
-    var logicalH = aspect > baseAspect ? baseH : baseW / aspect;
-    var scale = cssW / logicalW;
-    var padX = (logicalW - baseW) / 2;
-    var padY = (logicalH - baseH) / 2;
+    var need = aspect / (baseW / baseH);
+    var stretch = need > MAX_STRETCH ? MAX_STRETCH : need;
+    var scaleY = cssH / baseH;
+    var scaleX = scaleY * stretch;
+    var logicalW = cssW / scaleX;
+    var logicalH = cssH / scaleY;
+    var padX = Math.max(0, (logicalW - baseW) / 2);
+    var padY = Math.max(0, (logicalH - baseH) / 2);
     if (cv) {
         cv.width = Math.floor(cssW * dpr);
         cv.height = Math.floor(cssH * dpr);
@@ -74,9 +80,10 @@ function applyViewport(cv) {
         cssW: cssW,
         cssH: cssH,
         dpr: dpr,
-        scale: scale,
+        scale: scaleY,
+        scaleX: scaleX,
         // offsetX/offsetY = 逻辑可视区左上角在屏幕（CSS 像素）里的位置，也是画布变换的平移量
-        offsetX: padX * scale, offsetY: padY * scale,
+        offsetX: padX * scaleX, offsetY: padY * scaleY,
         logicalW: logicalW,
         logicalH: logicalH,
         padX: padX,
@@ -147,10 +154,10 @@ function drawPlateCover(ctx, img, x, y, w, h) {
     var left = dx - box.x;
     var right = box.x + box.w - (dx + iw);
     if (top > 0 || bottom > 0 || left > 0 || right > 0) {
-        // 极窄/极宽比例（如 4:3 平板）下阔图也不够铺时，用镜像边缘条补最外圈：
-        // 取图内约 1.2% 的窄条翻转铺出去，接缝处像素连续，不会出现硬边或留白。
-        var sx = Math.max(1, Math.round(iw * 0.012));
-        var sy = Math.max(1, Math.round(ih * 0.012));
+        // 只有极宽/极窄比例下阔图也不够铺时才走到这里：取图内与留边**等宽**的窄条 1:1 翻转铺出去，
+        // 接缝处像素连续，既不会出现硬边，也不会把画边缘的奶雾色拉成一片发白。
+        var sx = Math.max(1, Math.min(iw, Math.round(left > 0 ? left : iw * 0.012)));
+        var sy = Math.max(1, Math.min(ih, Math.round(top > 0 ? top : ih * 0.012)));
         var fullH = box.h;
         var fullW = box.w;
         ctx.save();
@@ -186,15 +193,14 @@ function drawPlateCover(ctx, img, x, y, w, h) {
     }
     ctx.drawImage(img, dx, dy, iw, ih);
 }
-/** 每帧开头：铺满整屏底色，再把坐标系变换到逻辑可视区（0..1280 保持在屏幕中央）。 */
+/** 每帧开头：铺满整屏底色，再把坐标系变换到逻辑可视区（0..1280 铺满整块屏幕）。 */
 function beginFrame(ctx) {
     var v = viewport;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = palette_1.PALETTE.forestDeep;
     ctx.fillRect(0, 0, v.canvasW, v.canvasH);
     closePathSafely(ctx);
-    var s = v.scale * v.dpr;
-    ctx.setTransform(s, 0, 0, s, v.offsetX * v.dpr, v.offsetY * v.dpr);
+    ctx.setTransform(v.scaleX * v.dpr, 0, 0, v.scale * v.dpr, v.offsetX * v.dpr, v.offsetY * v.dpr);
 }
 function endFrame(ctx) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -202,12 +208,12 @@ function endFrame(ctx) {
 /** 屏幕（CSS 像素）坐标 → 逻辑坐标。 */
 function toLogical(cssX, cssY) {
     var v = viewport;
-    return { x: (cssX - v.offsetX) / v.scale, y: (cssY - v.offsetY) / v.scale };
+    return { x: (cssX - v.offsetX) / v.scaleX, y: (cssY - v.offsetY) / v.scale };
 }
 /** 逻辑坐标 → 屏幕坐标（用于原生弹窗定位，暂少用）。 */
 function toScreen(logicX, logicY) {
     var v = viewport;
-    return { x: logicX * v.scale + v.offsetX, y: logicY * v.scale + v.offsetY };
+    return { x: logicX * v.scaleX + v.offsetX, y: logicY * v.scale + v.offsetY };
 }
 function closePathSafely(ctx) {
     if (ctx.beginPath)

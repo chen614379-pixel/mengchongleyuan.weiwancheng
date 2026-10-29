@@ -3,6 +3,7 @@
  * 本文件与 core/ 其余文件都不得依赖 wx / canvas（可无头运行）。
  */
 import { SpeciesId, TraitId } from '../config/species';
+import { EquipTraitId } from '../config/traits';
 import { BuffId } from '../config/cards';
 import { EffectBundle, WeatherId } from '../config/weather';
 import { RngState } from './rng';
@@ -68,6 +69,12 @@ export interface Unit {
   drainTimer: number;
   /** 替身草人是否已触发（每局一次） */
   decoyUsed: boolean;
+  /** §9 装备式特技（布阵阶段装备，null = 未装备） */
+  equip: EquipTraitId | null;
+  /** §9 借力模仿 / 共生血条 / 拟态伪装 选定的目标物种（null = 未选定） */
+  equipSpecies: SpeciesId | null;
+  /** §9 不屈是否已用掉（每局一次） */
+  unyieldUsed: boolean;
   /** 当前是否是「替身幻影」形态 */
   isDecoy: boolean;
   /** 当前位置（连续浮点，单位 = 格）。布阵阶段吸附在锚点（或替补席 -1） */

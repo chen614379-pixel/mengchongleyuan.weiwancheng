@@ -9,11 +9,14 @@
  */
 import { ECONOMY, roundDamage } from '../config/economy';
 import { deployCapOfRound } from '../config/species';
+import { EquipTraitId, equipNeedsSpecies, isEquipTraitId } from '../config/traits';
+import { SpeciesId } from '../config/species';
 import { TIMING } from '../config/timing';
 import { resolveWeather } from '../config/weather';
 import { aiTick } from './ai';
 import { battleOver, prepareBattle, stepBattle } from './battle';
 import { Command, CommandQueue, CommandResult } from './command';
+import { applyEquipAttributes, equipTrait } from './equip';
 import {
   ANCHOR_COUNT,
   anchorCenter,
@@ -91,6 +94,8 @@ function applyDeploy(state: BattleState, cmd: { faction: Faction; unitId: number
   u.pos.x = c.x;
   u.pos.y = c.y;
   s.units.push(u);
+  // §9：装备的属性改写（借力模仿 / 共生血条 / 拟态伪装）在场上才真正生效
+  if (u.equip !== null) applyEquipAttributes(u);
   pushEvent(state, 'UnitDeploy', cmd.faction, u.id, -1, 0, null, u.species);
   return { ok: true, fx: 'card-fly' };
 }
@@ -139,6 +144,24 @@ function refreshStats(u: Unit): void {
   u.atk = Math.floor(u.baseAtk * mult);
 }
 
+/**
+ * §9 装备式特技：布阵/集市阶段给单位装备（或换装/卸下）一条特技。
+ * 属性改写（借力模仿 / 共生血条 / 拟态伪装）在 equip.ts 里立即生效；
+ * 其余五条是纯被动，由 battle.ts / damage.ts 读取 `u.equip` 结算。
+ */
+function applyEquipTrait(
+  state: BattleState,
+  cmd: { faction: Faction; unitId: number; trait: EquipTraitId | null; species: SpeciesId | null }
+): CommandResult {
+  if (state.phase !== 'deploy' && state.phase !== 'market') return reject('bad-phase');
+  const u = unitById(state, cmd.unitId);
+  if (u === null || u.owner !== cmd.faction || !u.alive) return reject('no-such-unit');
+  if (cmd.trait !== null && !isEquipTraitId(cmd.trait)) return reject('bad-trait');
+  if (cmd.trait !== null && equipNeedsSpecies(cmd.trait) && cmd.species === null) return reject('needs-species');
+  equipTrait(u, cmd.trait, cmd.species);
+  return { ok: true, fx: 'buff-wrap' };
+}
+
 function applyCombine(state: BattleState, cmd: { faction: Faction; unitA: number; unitB: number }): CommandResult {
   if (state.phase !== 'deploy' && state.phase !== 'market') return reject('bad-phase');
   const s = side(state, cmd.faction);
@@ -165,6 +188,8 @@ function applyCombine(state: BattleState, cmd: { faction: Faction; unitA: number
   survivor.level = (survivor.level + 1) as 1 | 2 | 3;
   survivor.invested = survivor.invested + eaten.invested;
   refreshStats(survivor);
+  // §9：升级后重算装备改写（借力模仿的攻击力随等级倍率走，共生血条按新等级上限）
+  if (survivor.equip !== null) applyEquipAttributes(survivor);
   survivor.hp = survivor.maxHp;
   survivor.fx.combineBloom = 1;
   eaten.alive = false;
@@ -225,6 +250,8 @@ export function applyCommand(
       return applyEquipBuff(state, cmd.faction, cmd.cardId, cmd.unitId);
     case 'RemoveBuff':
       return applyRemoveBuff(state, cmd.faction, cmd.unitId, cmd.buffIndex);
+    case 'EquipTrait':
+      return applyEquipTrait(state, cmd);
     case 'ConfirmDeploy': {
       const s = side(state, cmd.faction);
       s.deployed = true;

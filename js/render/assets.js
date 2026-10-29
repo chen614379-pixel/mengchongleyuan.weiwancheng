@@ -45,13 +45,25 @@ var SCENES = [
     // 烘焙招牌、集市卡位都不用改；左右各 192px 是 AI 续画的森林，供宽屏铺满
     // （见 platform/screen.ts drawPlateCover 的 cover 铺法）。
     { name: 'bg-camp', path: 'assets/bg/bg-camp-wide.jpg', w: 1664, h: 720, kind: 'bg' },
-    { name: 'bg-board-plain', path: 'assets/bg/bg-board-plain-wide.jpg', w: 1664, h: 720, kind: 'bg' },
+    // 战斗底板（用户 2026-10-06 给的新「干净 UI 图」）：中央 1280×720 烘焙了左栏 4 槽 /
+    // 右栏 3 槽 / 齿轮 / 卷轴标题 / 紫恶魔 / 狗屋 / 底部 8 个苔藓垫，左右各 192px 1:1 镜像森林。
+    // 动态层按这些烘焙件的量测坐标贴上去（见 scene/match-layout.ts PLATE_HUD）。
+    { name: 'bg-board-plain', path: 'assets/bg/bg-board-wide.jpg', w: 1664, h: 720, kind: 'bg' },
     { name: 'ui-market', path: 'assets/bg/ui-market-wide.jpg', w: 1664, h: 720, kind: 'ui' },
-    { name: 'ui-deploy-fog', path: 'assets/bg/ui-deploy-fog-wide.jpg', w: 1664, h: 720, kind: 'ui' },
     { name: 'ui-result-victory', path: 'assets/bg/ui-result-victory-wide.jpg', w: 1664, h: 720, kind: 'ui' }
 ];
+/**
+ * HUD 贴图（从用户目标图里抠出来的手绘件）：
+ * - `coach-boy`：左下角「我」的大男孩立绘（含草帽/油灯，透明底）；
+ * - `doghouse`：狗屋（只有屋体与墙上的「HP」字，血量木牌由代码按数值绘制）。
+ * 缺图时必须回落到程序化手绘，见 src/render/coach.ts。
+ */
+var HUD_ART = [
+    { name: 'coach-boy', path: 'assets/ui/coach-boy.png', w: 256, h: 512, kind: 'ui' },
+    { name: 'doghouse', path: 'assets/ui/doghouse.png', w: 172, h: 113, kind: 'ui' },
+];
 /** 全部资源表。路径相对小游戏包根目录。 */
-exports.ASSET_LIST = SCENES.concat(cards(), units());
+exports.ASSET_LIST = SCENES.concat(cards(), units(), HUD_ART);
 var images = {};
 var failed = {};
 var surfaces = {};

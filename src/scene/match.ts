@@ -7,9 +7,10 @@
 import { Scene, pop } from './manager';
 import {
   BANNER_RECT, BOARD_RECT, Rect, benchAt, benchRect, coachRect, detailButtonRect, detailRect,
-  entryAt, entryPanelRect, entryRect, gearRect, giftRect, handAt, handRect, houseRect, impRect, inRect,
-  nearestPlayerAnchor, readyRect, refreshRect, reportArrowRect, resultButtonRect, scrollRect,
-  settingsRect, shelfAt, shelfRect, sunCoinRect, warbookRect, MARKET
+  entryAt, entryRect, gearRect, giftRect, handAt, handRect, houseRect, impRect, inRect,
+  nearestPlayerAnchor, plateSlot, readyRect, refreshRect, reportArrowRect, resultButtonRect, scrollRect,
+  settingsRect, shelfAt, shelfFrameRect, shelfRect, sideBackingRects, sideOut, sunCoinRect, warbookRect,
+  MARKET, MARKET_SIDE, SHELF, marketSideRow
 } from './match-layout';
 import { LAYOUT, anchorToPixel } from '../config/layout';
 import { PALETTE, rgba, tint } from '../config/palette';
@@ -23,7 +24,7 @@ import {
 } from '../core/types';
 import { Command, CommandQueue, CommandResult } from '../core/command';
 import {
-  ANCHOR_COUNT, anchorColRow, createBattle, deployCap, fieldUnits, side, unitById
+  ANCHOR_COUNT, anchorColRow, createBattle, deployCap, fieldUnits, isPlayerAnchor, side, unitById
 } from '../core/setup';
 import { tick as engineTick, submit as engineSubmit } from '../core/engine';
 import { aiTick } from '../core/ai';
@@ -33,6 +34,7 @@ import { playSfx } from '../platform/audio';
 import { GestureEvent } from '../platform/input';
 import { drawPlateCover, sceneBox, sceneCorners } from '../platform/screen';
 import { fitSize, setFont, textOutlined } from '../ui/theme';
+import { roundRectPath } from '../ui/brush';
 import { createFx, FxSystem } from '../ui/fx';
 import { drawSky, drawForestLayer, drawSunSpecks, drawVignette, drawWeather } from '../render/forest';
 import { getImage } from '../render/assets';
@@ -41,8 +43,8 @@ import { UnitView, drawUnit, speciesBodyRadius, drawSpeciesCreature } from '../r
 import { drawHpRing } from '../render/hpring';
 import { CardView, drawCard } from '../render/card';
 import {
-  SideEntryView, drawBench, drawScrollButton, drawSideEntry, drawCoachAvatar, drawDeployTimer,
-  drawScoreboardPanel, RoundLogView
+  SideEntryView, drawBench, drawScrollButton, drawSideEntry, drawSideEntryBaked, drawCoachAvatar,
+  drawSideStripBacking, drawDeployTimer, drawScoreboardPanel, RoundLogView
 } from '../render/sidebar';
 import { drawCoach } from '../render/coach';
 import { drawImp } from '../render/imp';
@@ -52,13 +54,19 @@ import {
   drawResultBanner, drawRewardRow, drawSunLedger
 } from '../render/result';
 import {
-  drawButton, drawGear, drawIconButton, drawSunCoin, drawTipBubble, drawToast, drawWoodPanel
+  drawButton, drawGear, drawIconButton, drawPlateWoodPatch, drawSunCoin, drawTipBubble, drawToast, drawWoodPanel
 } from '../render/ui';
 import { drawBroadleafTree, drawBush, drawGrassTuft } from '../render/paint';
 import { fillWatercolor, noiseAt, roundedRectPoints, strokeInk, P } from '../ui/brush';
 
 /** 结算页伤害堆叠条的矩形（绘制与点击判定共用，改一处即同步）。 */
 const DAMAGE_STACK = { x: 365, y: 344, w: 370, h: 190 };
+
+/**
+ * 视觉自检用：把对局停在这个阶段不前进，方便逐屏截图核对。
+ * 发布前保持 null（与 main.ts 的 DEV_ENTRY 一同置空）。
+ */
+const DEV_HOLD: string | null = null;
 
 export interface MatchOptions {
   seed?: number;
@@ -94,6 +102,9 @@ class MatchScene implements Scene {
   private time = 0;
   private logicTime = 0;
   private drag: DragState | null = null;
+  /** 拖拽棋子的平滑位置（指数跟手，避免宿主事件抖动导致一跳一跳） */
+  private dragFollowX = 0;
+  private dragFollowY = 0;
   private handDrag: { cardId: number; x: number; y: number; hoverUnit: number } | null = null;
   private selectedUnit = -1;
   private detailUnit = -1;
@@ -153,6 +164,8 @@ class MatchScene implements Scene {
 
     const before = b.phase;
     if (this.opts.dev) this.devStep(b);
+    // 视觉自检用：DEV_HOLD 指定的阶段无限延长，便于截图核对（发布前为 null）。
+    if (this.opts.dev && DEV_HOLD && b.phase === DEV_HOLD) b.phaseLeft = Math.max(b.phaseLeft, 99999);
     aiTick(b, this.queue);
     engineTick(b, this.queue, this.results);
     this.consumeResults();
@@ -438,8 +451,8 @@ class MatchScene implements Scene {
       if (inRect(giftRect(), x, y)) return 'gift';
     }
     if (b.phase === 'deploy' || b.phase === 'market') {
-      // 集市阶段的按钮画在 MARKET.ready（底板右上角），判定必须用同一个矩形，否则按钮点了没反应
-      const rr = b.phase === 'market' ? MARKET.ready : readyRect();
+      // 集市阶段的按钮是圆形 ❌（MARKET.exitRect），判定必须用同一个矩形，否则点了没反应
+      const rr = b.phase === 'market' ? MARKET.exitRect : readyRect();
       if (inRect(rr, x, y)) return 'ready';
     }
     return '';
@@ -474,11 +487,13 @@ class MatchScene implements Scene {
           unitId: u.id, fromAnchor: anchor, fromBench: -1, x, y, hover: anchor,
           valid: true, overBench: -1, startedAt: this.time
         };
+        this.dragFollowX = x;
+        this.dragFollowY = y;
         playSfx('tap');
         return;
       }
     }
-    const slot = benchAt(x, y);
+    const slot = benchAt(x, y, this.benchNarrow());
     if (slot >= 0) {
       const u = b.player.bench[slot];
       if (u) {
@@ -486,6 +501,8 @@ class MatchScene implements Scene {
           unitId: u.id, fromAnchor: -1, fromBench: slot, x, y, hover: -1,
           valid: false, overBench: -1, startedAt: this.time
         };
+        this.dragFollowX = x;
+        this.dragFollowY = y;
         playSfx('tap');
       }
     }
@@ -496,7 +513,7 @@ class MatchScene implements Scene {
     const b = this.battle;
     if (!d || !b) return;
     d.hover = nearestPlayerAnchor(d.x, d.y);
-    d.overBench = benchAt(d.x, d.y);
+    d.overBench = benchAt(d.x, d.y, this.benchNarrow());
     const source = unitById(b, d.unitId);
     d.valid = false;
     if (d.hover >= 0) {
@@ -895,51 +912,6 @@ class MatchScene implements Scene {
     return null;
   }
 
-  /**
-   * 盖住底板两侧烘焙的「镜像补边」条纹。
-   *
-   * 战场/布阵底板两侧的条纹是旧管线把镜像补边烘进图里留下的，1280 基准下正好压在
-   * 代码画的侧栏木框后面，宽屏（padX>0）侧栏外移后就会露出来。这里用底板自身最外侧
-   * 的 AI 森林（阔图多出来的 192px）横向拉伸铺满那两条，并把靠画面中央的一侧按 10 级
-   * alpha 羽化，边界不会出现硬直边，读起来仍是连续树林。
-   */
-  private hideBakedSideBands(ctx: CanvasRenderingContext2D, plate: any, t: number): void {
-    if (!plate) return;
-    const box = sceneBox();
-    const H = LAYOUT.SCREEN_H;
-    const iw = plate.width || 1664;
-    const band = Math.min(192, Math.round(iw * 0.115));
-    const leftEnd = 292;
-    const rightStart = 988;
-    if (leftEnd - box.x > 0) {
-      this.drawBandSlices(ctx, plate, 0, band, box.x, leftEnd - box.x, H, 1);
-    }
-    const rw = box.x + box.w - rightStart;
-    if (rw > 0) {
-      this.drawBandSlices(ctx, plate, iw - band, band, rightStart, rw, H, -1);
-    }
-  }
-
-  /** 把一段森林原画按 10 级 alpha 铺开：外缘不透明，靠画面中央的一侧逐渐淡出。 */
-  private drawBandSlices(
-    ctx: CanvasRenderingContext2D, img: any, sx: number, sw: number,
-    dx: number, dw: number, dh: number, dir: number
-  ): void {
-    const N = 12;
-    ctx.save();
-    for (let i = 0; i < N; i++) {
-      const t0 = i / N;
-      const t1 = (i + 1) / N;
-      const w = dw * (t1 - t0);
-      const x = dir > 0 ? dx + dw * t0 : dx + dw * (1 - t1);
-      // 前 70% 完全盖住条纹，最后 30% 才淡出，和底板草甸接上
-      ctx.globalAlpha = i < 7 ? 1 : [0.74, 0.5, 0.32, 0.18, 0.1][i - 7];
-      ctx.drawImage(img, sx + sw * t0, 0, sw * (t1 - t0), img.height || 720, x, 0, w + 1, dh);
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
   private highlightAt(x: number, y: number): number {
     const pages = this.buildReport();
     const items = pages[2].highlights || [];
@@ -964,12 +936,15 @@ class MatchScene implements Scene {
     ctx.save();
     ctx.translate(shake.x, shake.y);
 
-    // 布阵阶段用带晨雾的底板（雾已烘在图里，敌半场不可见）；集市阶段用集市底板；结算用结算底板；其余用干净战场底板。
+    // 战场底板就是用户给的纯背景图（两边 192px 是续画的森林）；布阵阶段在它上面叠程序化晨雾，
+    // 集市/结算各自换整张底板。
     const marketPlate = b.phase === 'market' ? getImage('ui-market') : null;
     const resultPlate = b.phase === 'result' ? getImage('ui-result-victory') : null;
-    const plate = (b.phase === 'deploy' ? getImage('ui-deploy-fog') : null) || marketPlate || resultPlate || getImage('bg-board-plain');
+    const plate = marketPlate || resultPlate || getImage('bg-board-plain');
     if (plate) {
       drawPlateCover(ctx, plate, 0, 0, w, h);
+      // 布阵：敌半场要藏起来，用程序化晨雾（树影 + 飘动雾带 + 「?」剪影）盖住棋盘上半。
+      if (b.phase === 'deploy') drawEnemyFog(ctx, renderTime, 1);
       // 结算底板只有胜利版一张（男孩举奖杯的庆祝插画）：败 / 平时压一层冷色水彩罩，
       // 让画面读起来是「惜败」而不是「夺冠」；我们自己的 HUD 随后画在罩子之上，不受影响。
       if (resultPlate && b.outcome !== 'win') {
@@ -996,12 +971,6 @@ class MatchScene implements Scene {
       drawForestLayer(ctx, box.w, box.h, 0, 'near', renderTime);
       ctx.restore();
     }
-    // 旧战场/布阵底板的两侧烘死了「镜像补边」条纹（从美术图裁出来时就带上了）：
-    // 1280 基准下它们正好压在代码画的侧栏木框之后，宽屏把侧栏推到屏幕两边后就会露出来。
-    // 这里用同一套程序化森林按不规则水彩轮廓盖住那两条，和底板中央的草甸自然相接。
-    if (plate && plate !== marketPlate && plate !== resultPlate) {
-      this.hideBakedSideBands(ctx, plate, renderTime);
-    }
     // 统一色grading：一层薄薄的深绿 + 顶部暖光，抵消水彩层的低饱和（不覆盖单位）
     if (!plate) {
       fillWatercolor(
@@ -1025,6 +994,9 @@ class MatchScene implements Scene {
 
     this.fx.draw(ctx, renderTime, 'back');
     if (!resultPlate) {
+      // 侧栏底衬**必须最先画**：它是把底板烘死的 4 格（左）/ 3 格（右）旧纸槽盖成 6 格
+      // 的背景层，晚于饲养员头像与卷轴/齿轮画会把它们切掉一条（既有 bug）。
+      if (!marketPlate) this.drawSideBacking(ctx);
       if (!marketPlate) this.drawCoaches(ctx, renderTime);
       this.drawField(ctx, renderTime);
       this.fx.draw(ctx, renderTime, 'front');
@@ -1046,11 +1018,33 @@ class MatchScene implements Scene {
     const overlay = !!(marketPlate || resultPlate);
     if (!overlay) {
       this.drawSidebars(ctx, renderTime);
+    }
+    // 集市阶段也要画替补席：选卡时玩家要能看见自己的候补动物。
+    // 集市底板把 y>=560 画成暗色台面，恰好当替补席的地面；面板本身已按
+    // MARKET_LIFT 整体上移，最低边落在动物（y 576..664）之上，不会互相遮挡。
+    if (!resultPlate) {
       this.drawBench(ctx, renderTime);
     }
     if (b.phase === 'market') this.drawShelf(ctx, renderTime);
+    // 集市阶段也要让玩家看见两侧出战席（提示词 P0-⑧：选卡时能看到左侧出战席和敌方出战席）。
+    //
+    // **必须画在 drawShelf 之后**：木架的木底会一直铺到 y 542（目的是盖住底板烘死的
+    // 样例卡，见 SHELF.h），而两排出战席正好落在卡牌下方那一段木底上（y 404..536），
+    // 画在木底之前会被整段刷掉。
+    //
+    // 集市底板没有烘焙战斗那套侧栏挂条，且木架横跨 x 81..1205，左右只剩 81/75px，
+    // 照搬战斗侧栏（列宽 194/261）塞不下竖排；所以集市走**横排两行**：
+    // 上排我方 y=404、下排敌方 y=474，仅画**已出战**的条目（空槽跳过）。
+    // 详见 MARKET_SIDE 的注释。
+    if (marketPlate) {
+      this.drawMarketSides(ctx, renderTime);
+    }
     if (!resultPlate) {
-      this.drawHand(ctx, renderTime);
+      // 集市阶段不画手牌：手牌区（handRect，y 480..612）落在左下角，与候补席、
+      // 赠礼木牌挤在一起，屏幕上会同时出现「候补席动物」+「手牌动物」两排，
+      // 用户看到的就是「左下角为什么会有四个动物」。
+      // 集市里买卡走 shelf，手牌不参与选卡，隐藏它不影响任何交互（handAt 仍生效）。
+      if (b.phase !== 'market') this.drawHand(ctx, renderTime);
       this.drawBanner(ctx, renderTime);
     }
     if (marketPlate) {
@@ -1060,22 +1054,52 @@ class MatchScene implements Scene {
       drawSunCoin(ctx, sr.x + 14, sr.y + 12, 60, b.player.sunlight, renderTime);
       drawGear(ctx, MARKET.gear.x, MARKET.gear.y, MARKET.gear.size, this.pressed === 'gear');
     } else if (!resultPlate) {
-      // 小屋血量牌放在 HUD 层绘制：场景层内部有未回收的画布变换，会把文字画倒。
-      drawHouseHp(ctx, houseRect().x, houseRect().y, houseRect().w, houseRect().h, b.player.houseHp, b.player.houseHpMax);
+      // 新战斗底板烘死了狗屋木牌（x 136..250 / y 670..710，原本写着「HP 24/30」），
+      // 所以只把动态血量写进牌子正面；缺图回落到程序化底板时才自己画牌子。
+      const hpRect = LAYOUT.PLATE.houseHp;
+      drawHouseHp(
+        ctx, hpRect.x - sideOut(), hpRect.y, hpRect.w, hpRect.h,
+        b.player.houseHp, b.player.houseHpMax,
+        { plate: !getImage('bg-board-plain') },
+      );
     }
     this.drawDragLayer(ctx, renderTime);
     this.drawPanels(ctx, renderTime);
     this.drawToastLayer(ctx);
   }
 
+  /**
+   * 左下角「我」：一个手绘大男孩立绘（用户目标图抠出的贴图）+ 狗屋。
+   * 贴在屏幕左边缘（跟着 `sideOut()` 外移，和侧栏同一套规则），
+   * 贴图缺失时回落到程序化饲养员（src/render/coach.ts）。
+   */
   private drawCoaches(ctx: CanvasRenderingContext2D, renderTime: number): void {
     const b = this.battle;
     if (!b) return;
+    // 新战斗底板（art-src/ui-board-empty-16x9-01）已经把左下角的大男孩、狗屋与
+    // 右上角的小恶魔烘死在画面里，这里不再重复贴图；缺图（程序化底板）时才自己画。
+    if (getImage('bg-board-plain')) return;
+    const out = sideOut();
     const coachState = b.phase === 'battle' ? 'idle' : b.phase === 'settle' ? 'proud' : 'idle';
-    const cr = coachRect();
-    drawCoachAvatar(ctx, cr.x, cr.y, cr.w, coachState, renderTime);
-    const callout: { x: number; y: number } = { x: BOARD_RECT.x + 96, y: 596 };
-    drawCoach(ctx, callout.x, callout.y, coachState, renderTime);
+    const boy = getImage('coach-boy');
+    // 目标图量测：男孩逻辑 x 6.3..122.1、y 459.6..694.7（宽高比与贴图一致）。
+    const bx = 6.3 - out;
+    const by = 459.6;
+    const bw = 116;
+    const bh = 235;
+    if (boy) {
+      ctx.drawImage(boy, bx, by, bw, bh);
+    } else {
+      const cr = coachRect();
+      drawCoachAvatar(ctx, cr.x, cr.y, cr.w, coachState, renderTime);
+      drawCoach(ctx, bx + bw / 2, by + bh, coachState, renderTime);
+    }
+
+    const house = getImage('doghouse');
+    if (house) {
+      // 目标图量测：狗屋逻辑 x 131.9..252.6、y 600.7..680.0。
+      ctx.drawImage(house, 131.9 - out, 600.7, 121, 79);
+    }
 
     const ir = impRect();
     const impState = b.phase === 'battle' ? 'idle' : b.phase === 'settle' ? 'hurt' : 'idle';
@@ -1148,33 +1172,102 @@ class MatchScene implements Scene {
     void w;
   }
 
+  /**
+   * 集市阶段的精简侧栏（提示词 P0-⑧）。
+   *
+   * 需求：选卡时要能看见**左侧出战席**和**敌方出战席**。
+   * 集市底板没有烘焙战斗那套侧栏挂条，卡位区（x 81..1205）又被卡牌占满
+   * （卡牌现在铺满底板样例位 y 176..549），所以只剩画面最外侧的两条木质边条可用。
+   *
+   * 做法：在左右各自最外侧竖排**已出战**的条目（空位不画，避免满屏占位框），
+   * 用与战斗期完全相同的烘焙条目渲染（compact 模式）保证美术风格一致。
+   */
+  private drawMarketSides(ctx: CanvasRenderingContext2D, renderTime: number): void {
+    const b = this.battle;
+    if (!b) return;
+    // 集市底板没有烘焙战斗那套侧栏挂条，卡位区又横跨整幅 x 81..1205，
+    // 中间的横向空间全部被卡牌占满（卡牌现在铺满底板样例位 y 176..549）。
+    // 唯一剩下的空档是**画面最外侧的两条木质边条**（x 0..79 / 1206..1280），
+    // 所以集市改成**左右各一列竖排**（我方贴左、敌方贴右），
+    // 用 compact 模式只画圆形头像框 + 绿色血量弧（详见 drawSideEntryBaked）。
+    // 详见 MARKET_SIDE 的注释。
+    const slots = MARKET_SIDE.slots;
+    const sides: Faction[] = ['player', 'enemy'];
+    for (let s = 0; s < sides.length; s++) {
+      const faction = sides[s];
+      const views = entryViews(b, faction, faction === 'enemy' && !this.enemyVisible(), this.enemyGhost);
+      const col = marketSideRow(faction);
+      for (let i = 0; i < views.length && i < slots; i++) {
+        const e = views[i];
+        if (e.empty) continue;
+        const x = col.x;
+        const y = col.y + i * (col.h + col.gap);
+        drawSideEntryBaked(ctx, {
+          x, y, w: col.w, h: col.h,
+          cx: x + col.w / 2, cy: y + col.h / 2,
+          r: Math.min(LAYOUT.PLATE.ringR, col.w / 2 - 2, col.h / 2 - 2),
+        }, e, { faction, time: renderTime, index: i, compact: true });
+      }
+    }
+  }
+
+  /**
+   * 侧栏底衬。
+   *
+   * 底板只烘了 4 格（左）/ 3 格（右）的**宽纸槽**，而用户 2026-10-14 的口径是
+   * 「底板那版显示宽度太大，侧栏只用圆形头像框」，所以这里把烘死的宽纸槽整块盖掉，
+   * 只留一块与底板同色系的底，之后由 drawSidebars 画 6 个圆框。
+   *
+   * 覆盖区必须**避让底板烘死的「戴草帽大男孩」（逻辑 x 6..122 / y ≥459.6）与
+   * 「小恶魔」（x 902..1040 / y 20..200）**——这两个是底板美术，drawCoaches 在有
+   * 底板时直接 return，不会重画，盖住就真没了。所以覆盖区被切成数组，见
+   * match-layout.ts 的 sideBackingRects。
+   *
+   * 调用点在 drawCoaches 之前（见 render 里的顺序注释），保证饲养员、卷轴、齿轮
+   * 都画在底衬之上，不会被切掉一条。
+   */
+  private drawSideBacking(ctx: CanvasRenderingContext2D): void {
+    const factions: Faction[] = ['player', 'enemy'];
+    for (let k = 0; k < factions.length; k++) {
+      const f = factions[k];
+      drawSideStripBacking(ctx, sideBackingRects(f), f);
+    }
+  }
+
   private drawSidebars(ctx: CanvasRenderingContext2D, renderTime: number): void {
     const b = this.battle;
     if (!b) return;
-    const gearPressed = this.pressed === 'gear';
-    const gr = gearRect();
-    drawGear(ctx, gr.x, gr.y, gr.w, gearPressed);
+    // 新战斗底板（用户 2026-10-06 的干净 UI 图）已经把齿轮、标题卷轴、两侧木质挂条
+    // 与卡槽纸面全部烘死在画面里，所以这些件不再重复绘制，动态层直接贴进烘焙卡槽。
+    const baked = !!getImage('bg-board-plain');
+    if (!baked) {
+      const gearPressed = this.pressed === 'gear';
+      const gr = gearRect();
+      drawGear(ctx, gr.x, gr.y, gr.w, gearPressed);
+    }
     const sr = scrollRect();
     drawScrollButton(ctx, sr.x, sr.y, sr.w, this.pressed === 'scroll', renderTime);
 
-    // 两侧木质挂条（对齐参考图：条目坐在木条上，而不是浮在森林里）
-    const pl = entryPanelRect('player');
-    const pe = entryPanelRect('enemy');
-    drawWoodPanel(ctx, pl.x, pl.y, pl.w, pl.h, { tone: 'bark', radius: 18, alpha: 0.9, seedIndex: 501 });
-    drawWoodPanel(ctx, pe.x, pe.y, pe.w, pe.h, { tone: 'bark', radius: 18, alpha: 0.9, seedIndex: 502 });
-
     const myEntries = entryViews(b, 'player', false);
     for (let i = 0; i < 6; i++) {
-      const r: Rect = entryRect('player', i);
+      const s = plateSlot('player', i);
       const e = i < myEntries.length ? myEntries[i] : emptyEntry();
-      drawSideEntry(ctx, r.x, r.y, r.w, r.h, e, { faction: 'player', time: renderTime, index: i });
+      if (baked) {
+        drawSideEntryBaked(ctx, s, e, { faction: 'player', time: renderTime, index: i });
+      } else {
+        drawSideEntry(ctx, s.x, s.y, s.w, s.h, e, { faction: 'player', time: renderTime, index: i });
+      }
     }
 
     const enemyEntries = entryViews(b, 'enemy', !this.enemyVisible(), this.enemyGhost);
     for (let i = 0; i < 6; i++) {
-      const r: Rect = entryRect('enemy', i);
+      const s = plateSlot('enemy', i);
       const e = i < enemyEntries.length ? enemyEntries[i] : emptyEntry();
-      drawSideEntry(ctx, r.x, r.y, r.w, r.h, e, { faction: 'enemy', time: renderTime, index: i });
+      if (baked) {
+        drawSideEntryBaked(ctx, s, e, { faction: 'enemy', time: renderTime, index: i });
+      } else {
+        drawSideEntry(ctx, s.x, s.y, s.w, s.h, e, { faction: 'enemy', time: renderTime, index: i });
+      }
     }
 
     const sc = sunCoinRect();
@@ -1188,21 +1281,35 @@ class MatchScene implements Scene {
     if (b.weatherText) {
       setFont(ctx, LAYOUT.FONT.entry, 'normal');
       ctx.textAlign = 'center';
-      ctx.fillStyle = rgba(PALETTE.creamMist, 0.9);
-      ctx.fillText(b.weatherText, LAYOUT.SCREEN_W / 2, 96);
+      // 底板在小溪上方是浅苔绿，奶油色字会糊掉，改用深绿字 + 奶油描边
+      textOutlined(
+        ctx, b.weatherText, LAYOUT.SCREEN_W / 2, 96,
+        LAYOUT.FONT.entry, rgba(PALETTE.forestDeep, 0.9), 'center', 2, PALETTE.creamMist,
+      );
     }
+  }
+
+  /**
+   * 替补席是否处于「收窄」阶段。
+   *
+   * 单一出处：绘制（drawBench）与命中判定（benchAt）都调它，
+   * 避免出现「画的是窄条、点的却是宽格」这类两处不一致的错位。
+   * 注意它只切换基线，**不改变动物尺寸**（尺寸恒为 LAYOUT.BENCH_ART.size）。
+   */
+  private benchNarrow(): boolean {
+    const b = this.battle;
+    if (!b) return false;
+    return b.phase === 'battle' || b.phase === 'observe' || b.phase === 'settle';
   }
 
   private drawBench(ctx: CanvasRenderingContext2D, renderTime: number): void {
     const b = this.battle;
     if (!b) return;
-    const narrow = b.phase === 'battle' || b.phase === 'observe' || b.phase === 'settle';
+    const narrow = this.benchNarrow();
     const r0 = benchRect(0, narrow);
     const total = LAYOUT.BENCH.slots * LAYOUT.BENCH.cell + (LAYOUT.BENCH.slots - 1) * LAYOUT.BENCH.gap;
-    // 替补席木质底板
-    drawWoodPanel(ctx, r0.x - 12, r0.y - 10, total + 24, r0.h + 20, {
-      tone: 'bark', radius: 16, alpha: 0.92, seedIndex: 503
-    });
+    // 替补席不再铺木架：目标图里动物就直接坐在底板的草地上，草堆由 drawBench 程序化画。
+    // 动物尺寸与阶段无关（narrow 只换基线），保证「准备就绪」前后渲染尺寸一致。
     const slots: (CardView | null)[] = [];
     for (let i = 0; i < LAYOUT.BENCH.slots; i++) {
       const u = b.player.bench[i];
@@ -1228,48 +1335,143 @@ class MatchScene implements Scene {
   private drawShelf(ctx: CanvasRenderingContext2D, renderTime: number): void {
     const b = this.battle;
     if (!b) return;
-    // 每格一块与底板同色的木底，盖掉烘死的样例卡；空位内嵌浅色纸面
+    // 卡位与底板木框对齐：木框外沿 = shelfFrameRect(i)，卡牌 = shelfRect(i)
+    // （木框向内缩 SHELF.inset 一整圈），于是**卡牌完全落在底板烘死的样例卡位置上**，
+    // 四周只露一圈 8px 窄木边，不再是「两张脱节的贴片」。
+    //
+    // 木底**用底板自身的木纹像素**铺满整条木架（x 81..1205 / y 168..557），
+    // 一次盖掉底板在五个卡位里烘死的整张样例卡；不再逐格 drawWoodPanel，
+    // 因为「另画一套 bark 木栏压上去」正是用户反复报的「覆盖」。
+    const mimg = getImage('ui-market');
+    if (mimg) {
+      // drawPlateCover 把 1664 宽的底板居中：dx = w/2 - iw/2，逻辑 x = 图像 x - pad
+      const pad = (mimg.width - LAYOUT.SCREEN_W) / 2;
+      // 取材条（图像像素）：卡位区左边缘（逻辑 x 2..79）与右边缘（x 1201..1278）
+      const stripsAt = (iy: number, ih: number) => ([
+        { x: 2 + pad, y: iy, w: 77, h: ih },
+        { x: 1201 + pad, y: iy, w: 77, h: ih },
+      ]);
+      // 纵向映射：木架逻辑 y 168..557 ←→ 底板图像 y 170..570，两组几乎 1:1
+      // （kY = 400/389 ≈ 1.03），所以铺上去的木纹和底板上下方的木纹是接得上的。
+      // 木架范围由底板烘死的样例卡反推：样例卡实测 y 176..549（高 373），
+      // 上下各留 SHELF.inset(8) → 木底 168..557，正好完整盖住样例卡。
+      const IY0 = 170, IY1 = 570;
+      const MY0 = SHELF.y0, MY1 = SHELF.y0 + SHELF.h;
+      const kY = (IY1 - IY0) / (MY1 - MY0);
+      drawPlateWoodPatch(
+        ctx, mimg,
+        { x: 81, y: MY0, w: 1124, h: MY1 - MY0 },
+        stripsAt(IY0, (MY1 - MY0) * kY), 81,
+      );
+      // 右下角烘焙的「刷新」圆牌（顶边 y≈543）被木底压掉了顶盖，按圆形裁回来——
+      // 只还圆盘本身，盘子外那几 px 样例卡底边仍然由木底盖着。
+      const rr = refreshRect();
+      const rcx = rr.x + rr.w / 2;
+      const rcy = rr.y + rr.h / 2;
+      const rrad = Math.min(rr.w, rr.h) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(rcx, rcy, rrad, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(
+        mimg,
+        rr.x + pad, rcy - rrad, rr.w, rrad * 2,
+        rr.x, rcy - rrad, rr.w, rrad * 2,
+      );
+      ctx.restore();
+    }
     for (let i = 0; i < 5; i++) {
       const r = shelfRect(i);
-      drawWoodPanel(ctx, r.x, r.y, r.w, r.h, { tone: 'bark', radius: 20 });
       const slot = b.shelf[i];
       if (!slot || !slot.card || slot.taken) {
-        strokeInk(ctx, roundedRectPoints(r.x + 20, r.y + 20, r.w - 40, r.h - 40, 14), {
-          width: 2, close: true, color: rgba(PALETTE.inkSoft, 0.22), seedIndex: 700 + i, jitter: 1.6
+        // 空席位（提示词 P2-⑮）：画一圈**虚线**卡牌剪影 + 居中的「+」，
+        // 让玩家一眼看出「这里还能买卡」，而不是一句灰字「空摊位」。
+        // 虚线用 setLineDash，必须 save/restore 配对，否则会污染后面的所有描边。
+        const sr = r.x + 10;
+        const sy = r.y + 10;
+        const sw = r.w - 20;
+        const sh = r.h - 20;
+        ctx.save();
+        ctx.setLineDash([9, 7]);
+        ctx.lineDashOffset = -((renderTime / 90) % 16);
+        strokeInk(ctx, roundedRectPoints(sr, sy, sw, sh, 16), {
+          width: 2.4, close: true, color: rgba(PALETTE.inkSoft, 0.34), seedIndex: 700 + i, jitter: 0.8
         });
-        setFont(ctx, 22, 'normal');
-        ctx.textAlign = 'center';
-        ctx.fillStyle = rgba(PALETTE.inkSoft, 0.42);
-        ctx.fillText('空摊位', r.x + r.w / 2, r.y + r.h / 2 + 8);
+        ctx.restore();
+        // 「+」号：两条短线，居中
+        const pcx = r.x + r.w / 2;
+        const pcy = r.y + r.h / 2;
+        const pl = Math.min(22, sw * 0.16);
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = rgba(PALETTE.inkSoft, 0.4);
+        ctx.beginPath();
+        ctx.moveTo(pcx - pl, pcy);
+        ctx.lineTo(pcx + pl, pcy);
+        ctx.moveTo(pcx, pcy - pl);
+        ctx.lineTo(pcx, pcy + pl);
+        ctx.stroke();
+        ctx.restore();
         continue;
       }
       const check = canBuy(b, 'player', i, false);
-      const cw = r.w - 10;
-      const ch = cw * (LAYOUT.CARD.h / LAYOUT.CARD.w);
-      drawCard(ctx, cardViewFromInstance(slot.card), r.x + 5, r.y + (r.h - ch) / 2, {
-        time: renderTime, affordable: check.ok, scale: cw / LAYOUT.CARD.w,
+      // r = shelfRect(i) 就是**底板烘死样例卡的位置**（木框内缩 SHELF.inset 一整圈），
+      // 卡牌直接铺满它：传 w/h 而不是 scale，因为样例位比例 0.53 与卡面原生
+      // 168×232(0.724) 不同，等比 scale 永远盖不满样例位。
+      drawCard(ctx, cardViewFromInstance(slot.card), r.x, r.y, {
+        time: renderTime, affordable: check.ok, w: r.w, h: r.h,
         pressed: this.rejectCard === i && this.time - this.rejectAt < 400
       });
     }
 
-    // 刷新圆牌（底板上烘死的绿圆牌先被一块木底盖住）
+    // 刷新圆牌与赠礼牌：**只接管数值与命中区，不再重画一套**。
+    //
+    // 集市底板（ui-market-wide.jpg）在原位置烘死了一套「刷新」绿圆牌和
+    // 「本轮免费赠礼 / 1 张」木牌，底板的美术与卡槽是同一张插画、同一套木纹光影，
+    // 程序化重画永远贴不出那种质感；两套并存就是用户报的「为什么有两个刷新建和
+    // 本轮免费赠礼」。按遮挡处理优先级原则（保留被遮盖的那一版），这里保留底板版，
+    // 删掉重画版，只把动态数值叠到烘焙件上。
+    //
+    // 底板烘焙位置（实测）：刷新圆牌逻辑 (1092, 553) 直径 110；
+    // 赠礼木牌暖色区 logical x 889..1227, y 581..719。
     const rr = refreshRect();
-    const pad = 12;
-    drawWoodPanel(ctx, rr.x - pad, rr.y - pad, rr.w + pad * 2, rr.h + pad * 2, {
-      tone: 'bark', radius: (rr.w + pad * 2) / 2
-    });
-    drawWoodSignCircle(ctx, rr.x, rr.y, rr.w, '刷新 · ' + refreshCost(b), b.refreshUsed >= ECONOMY.REFRESH_LIMIT, renderTime);
-    // 免费赠礼（对齐底板烘死的双行木牌）
     const gr = giftRect();
+
+    // 刷新圆牌：烘焙圆盘上原本印着「刷新 · 2」，但费用要随刷新次数变化，
+    // 所以用**牌面色**把原印字盖掉再写我们的数值——这是唯一的例外，
+    // 因为底板烘死的「2」是静态值，不盖就会和真实费用矛盾。
+    const rcx = rr.x + rr.w / 2;
+    const rcy = rr.y + rr.h / 2;
+    const rDisabled = b.refreshUsed >= ECONOMY.REFRESH_LIMIT;
+    const label = '' + refreshCost(b);
+    ctx.save();
+    // 先抹掉烘焙的旧数字区域（圆盘中央偏下的窄带），用圆盘同色系覆盖
+    fillWatercolor(ctx, roundedRectPoints(rcx - 46, rcy + 2, 92, 40, 12),
+      PALETTE.moss, { alpha: 0.92, layers: 1, wetEdge: true, seedIndex: 771 });
+    ctx.restore();
+    textOutlined(ctx, '刷新', rcx, rcy - 16, 26,
+      rDisabled ? rgba(PALETTE.inkSoft, 0.5) : PALETTE.inkSoft, 'center', 2);
+    textOutlined(ctx, label, rcx, rcy + 30, 34,
+      rDisabled ? rgba(PALETTE.inkSoft, 0.5) : PALETTE.forestDeep, 'center', 2.4);
+
+    // 免费赠礼：烘焙木牌上原印「本轮免费赠礼 / 1 张」，用牌面色盖掉后写动态状态
+    // （赠礼用掉后要变成「本回合已领」，不盖就会两个状态同时出现）。
     ctx.save();
     if (this.giftArmed) ctx.translate(0, 3);
-    drawWoodPanel(ctx, gr.x, gr.y, gr.w, gr.h, { tone: 'bark', radius: LAYOUT.BUTTON_RADIUS });
-    if (b.giftUsed) {
-      textOutlined(ctx, '本回合已领', gr.x + gr.w / 2, gr.y + gr.h * 0.57, 20,
-        rgba(PALETTE.inkSoft, 0.6), 'center', 1.6);
+    // 牌面内缩一点，避免盖到木牌描边
+    fillWatercolor(ctx, roundedRectPoints(gr.x + 6, gr.y + 6, gr.w - 12, gr.h - 12, 10),
+      PALETTE.barkLight, { alpha: 0.94, layers: 1, wetEdge: true, seedIndex: 772 });
+    // 注意：`b.giftUsed` / `b.refreshUsed` 是**双方共享**的集市状态（任意一方用掉就置位），
+    // 直接读它会让 AI 用掉赠礼后玩家的木牌也变成「本回合已领」——玩家会以为自己领过了。
+    // 所以木牌只反映**玩家自己**的赠礼状态（economy.player.giftUsed），共享位只用于禁用。
+    const mineUsed = b.economy.player.giftUsed;
+    if (mineUsed) {
+      textOutlined(ctx, '本回合已领', gr.x + gr.w / 2, gr.y + gr.h * 0.58, 20,
+        rgba(PALETTE.inkSoft, 0.66), 'center', 1.8);
     } else {
-      textOutlined(ctx, '本轮免费赠礼', gr.x + gr.w / 2, gr.y + 32, 19, PALETTE.inkSoft, 'center', 1.8);
-      textOutlined(ctx, '1 张', gr.x + gr.w / 2, gr.y + 68, 26, PALETTE.forestDeep, 'center', 2);
+      textOutlined(ctx, '本轮免费赠礼', gr.x + gr.w / 2, gr.y + 26, 19, PALETTE.inkSoft, 'center', 1.8);
+      textOutlined(ctx, '1 张', gr.x + gr.w / 2, gr.y + 58, 25, PALETTE.forestDeep, 'center', 2);
     }
     ctx.restore();
   }
@@ -1282,22 +1484,55 @@ class MatchScene implements Scene {
     const secs = Math.max(0, Math.ceil(b.phaseLeft / 1000));
     drawWoodPanel(ctx, r.x, r.y, r.w, r.h, { tone: 'bark', radius: LAYOUT.PANEL_RADIUS });
     const title = '第 ' + b.round + ' 回合 · ' + phaseName;
-    textOutlined(ctx, title, r.x + r.w / 2, r.y + r.h * 0.5 + 10,
+    // 集市横幅比战斗横幅矮（h 92 vs 110），标题与倒计时分层排在横幅内部：
+    // 原先把倒计时画在横幅**下方**（r.y + r.h + 6），被横幅下沿的木纹吃掉一半，
+    // 就是用户报的「顶部倒计时被木横幅遮挡」。
+    const inBanner = b.phase === 'market';
+    const titleY = inBanner ? r.y + r.h * 0.42 + 6 : r.y + r.h * 0.5 + 10;
+    textOutlined(ctx, title, r.x + r.w / 2, titleY,
       fitSize(ctx, title, r.w - 44, LAYOUT.FONT.h2, 20), PALETTE.inkSoft, 'center');
     if (b.phase === 'deploy' || b.phase === 'observe' || b.phase === 'battle' || b.phase === 'market') {
-      drawDeployTimer(ctx, r.x + r.w / 2, r.y + r.h + 6, 1 - b.phaseLeft / phaseTotal(b.phase), secs, renderTime);
+      const timerY = inBanner ? r.y + r.h - 16 : r.y + r.h + 6;
+      drawDeployTimer(ctx, r.x + r.w / 2, timerY, 1 - b.phaseLeft / phaseTotal(b.phase), secs, renderTime);
     }
     if (b.phase === 'deploy' || b.phase === 'market') {
-      const rr = b.phase === 'market' ? MARKET.ready : readyRect();
-      drawButton(ctx, rr.x, rr.y, rr.w, rr.h, b.phase === 'deploy' ? '准备就绪' : '结束集市', {
-        state: 'normal', time: renderTime, radius: LAYOUT.BUTTON_RADIUS
-      });
+      if (b.phase === 'market') {
+        // 集市「结束集市」按提示词改成纯 ❌：不再占一整条木牌，
+        // 收成一颗圆形小按钮，给卡牌行与候补席让出竖向空间。
+        const er = MARKET.exitRect;
+        drawWoodPanel(ctx, er.x, er.y, er.w, er.h, { tone: 'bark', radius: er.w / 2 });
+        strokeInk(ctx, roundedRectPoints(er.x, er.y, er.w, er.h, er.w / 2), {
+          width: 2, close: true, color: PALETTE.bark, seedIndex: 880, jitter: 1.1
+        });
+        const exc = er.x + er.w / 2;
+        const ecy = er.y + er.h / 2;
+        const el = er.w * 0.24;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = PALETTE.inkSoft;
+        ctx.beginPath();
+        ctx.moveTo(exc - el, ecy - el);
+        ctx.lineTo(exc + el, ecy + el);
+        ctx.moveTo(exc + el, ecy - el);
+        ctx.lineTo(exc - el, ecy + el);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        const rr = readyRect();
+        drawButton(ctx, rr.x, rr.y, rr.w, rr.h, '准备就绪', {
+          state: 'normal', time: renderTime, radius: LAYOUT.BUTTON_RADIUS
+        });
+      }
     }
     if (b.phase === 'deploy') {
-      setFont(ctx, LAYOUT.FONT.entry, 'normal');
-      ctx.fillStyle = rgba(PALETTE.creamMist, 0.85);
-      ctx.textAlign = 'center';
-      ctx.fillText('出战上限 ' + deployCap(b, 'player') + ' · 长按拖动 · 落点苔藓光斑为合法位置', LAYOUT.SCREEN_W / 2, r.y + r.h + 44);
+      // 新底板是亮色草甸，浅色提示句会糊掉：改成深墨字 + 奶油描边。
+      textOutlined(
+        ctx,
+        '出战上限 ' + deployCap(b, 'player') + ' · 长按拖动 · 落点苔藓光斑为合法位置',
+        LAYOUT.SCREEN_W / 2, r.y + r.h + 44, LAYOUT.FONT.entry,
+        rgba(PALETTE.forestDeep, 0.88), 'center', 1.8, PALETTE.creamMist,
+      );
     }
   }
 
@@ -1306,23 +1541,34 @@ class MatchScene implements Scene {
     if (!b) return;
     const d = this.drag;
     if (d) {
-      if (d.hover >= 0) {
-        const p = this.anchorPixel(d.hover);
-        const r = speciesBodyRadius(this.unitSpecies(d.unitId)) + 12;
-        drawMossPatch(ctx, p.x, p.y, d.valid ? r : r * 0.7, renderTime, d.valid ? 1 : 0.35);
-      }
+      // 拖动棋子时把可落位的格子全部亮出来（用户要求：拖到棋盘上要看得见格子）
+      this.drawPlacementCells(ctx, renderTime, d);
       const u = unitById(b, d.unitId);
       if (u) {
-        drawUnit(ctx, unitViewOf(u), {
-          x: d.x, y: d.y, time: renderTime, scale: 1.12, facing: u.facing,
-          showRing: false, dragging: true, showShadow: true
-        });
+        // 跟手：宿主的事件坐标会有小幅抖动，做一次指数平滑，棋子就不会一跳一跳
+        const k = 0.45;
+        this.dragFollowX += (d.x - this.dragFollowX) * k;
+        this.dragFollowY += (d.y - this.dragFollowY) * k;
+        // 落点预览：半透明的棋子先落到目标锚点上，玩家能看清会落在哪一格；
+        // 棋子已经快贴到目标格时就不画了（两只会叠在一起反而看不清）。
         if (d.hover >= 0) {
           const gp = this.anchorPixel(d.hover);
-          drawHpRing(ctx, gp.x, gp.y, speciesBodyRadius(u.species) + LAYOUT.RING.gap, 0.7, {
-            time: renderTime, alpha: 0.35, width: 3
-          });
+          const fdx = gp.x - this.dragFollowX;
+          const fdy = gp.y - this.dragFollowY;
+          if (fdx * fdx + fdy * fdy > 34 * 34) {
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            drawUnit(ctx, unitViewOf(u), {
+              x: gp.x, y: gp.y, time: renderTime, scale: 1, facing: u.facing,
+              showRing: false, showShadow: false
+            });
+            ctx.restore();
+          }
         }
+        drawUnit(ctx, unitViewOf(u), {
+          x: this.dragFollowX, y: this.dragFollowY + 24, time: renderTime, scale: 1.18,
+          facing: u.facing, showRing: true, dragging: true, showShadow: true
+        });
       }
       return;
     }
@@ -1337,6 +1583,55 @@ class MatchScene implements Scene {
         });
       }
     }
+  }
+
+  /**
+   * 拖动时把所有我方锚点画成扁圆角「格子」：
+   * 空位是苔绿、已有单位是暖木色（可合并/交换）、当前悬停那格描边加粗并带呼吸光晕；
+   * 落在非法位置（超出出征上限 / 不在锚点上）时悬停格转浆果红。
+   */
+  private drawPlacementCells(ctx: CanvasRenderingContext2D, renderTime: number, d: DragState): void {
+    const b = this.battle;
+    if (!b) return;
+    const hoverOk = d.hover >= 0 && d.valid;
+    ctx.save();
+    for (let a = 0; a < ANCHOR_COUNT; a++) {
+      if (!isPlayerAnchor(a)) continue;
+      const p = this.anchorPixel(a);
+      const cr = anchorColRow(a);
+      const squash = 1 - LAYOUT.PERSPECTIVE * ((LAYOUT.GRID.rows - 1 - cr.row) / (LAYOUT.GRID.rows - 1));
+      const cw = LAYOUT.GRID.cellW * 0.84;
+      const ch = LAYOUT.GRID.cellH * 0.84 * squash;
+      const occupied = this.unitAtAnchor('player', a) !== null;
+      const isHover = a === d.hover;
+      const pulse = 0.5 + 0.5 * Math.sin(renderTime / 260 + a);
+      let fill = occupied ? PALETTE.barkLight : PALETTE.leafLight;
+      let fillA = isHover ? 0.42 : occupied ? 0.16 : 0.2;
+      let edge = occupied ? PALETTE.bark : PALETTE.forestMid;
+      let edgeA = isHover ? 0.95 : 0.45;
+      let lw = isHover ? 2.6 : 1.6;
+      if (isHover && !hoverOk) {
+        fill = PALETTE.berry;
+        edge = PALETTE.berry;
+        edgeA = 0.95;
+      }
+      ctx.globalAlpha = 1;
+      roundRectPath(ctx, p.x - cw / 2, p.y - ch / 2, cw, ch, ch * 0.42, isHover ? 1.2 : 0.9, 700 + a);
+      ctx.fillStyle = rgba(fill, fillA + (isHover ? pulse * 0.12 : 0));
+      ctx.fill();
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = rgba(edge, edgeA);
+      ctx.stroke();
+      if (isHover) {
+        ctx.globalAlpha = 0.18 + pulse * 0.22;
+        roundRectPath(ctx, p.x - cw * 0.68, p.y - ch * 0.9, cw * 1.36, ch * 1.8, ch * 0.8, 1.6, 780 + a);
+        ctx.strokeStyle = rgba(hoverOk ? PALETTE.sunbeam : PALETTE.berry, 0.9);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
   }
 
   private drawPanels(ctx: CanvasRenderingContext2D, renderTime: number): void {
@@ -1359,7 +1654,7 @@ class MatchScene implements Scene {
     if (this.showSettings) {
       const r = settingsRect();
       drawWoodPanel(ctx, r.x, r.y, r.w, r.h, { tone: 'bark', radius: LAYOUT.PANEL_RADIUS });
-      textOutlined(ctx, '设置', r.x + r.w / 2, r.y + 54, LAYOUT.FONT.h2, PALETTE.creamMist, 'center');
+      textOutlined(ctx, '设置', r.x + r.w / 2, r.y + 54, LAYOUT.FONT.h2, PALETTE.inkSoft, 'center', 2, PALETTE.creamMist);
       const labels = ['音效 / 音乐', '投降 · 重开本局', '返回营地'];
       for (let i = 0; i < 3; i++) {
         drawButton(ctx, r.x + 40, r.y + 130 + i * 74, r.w - 80, 56, labels[i], {
@@ -1368,7 +1663,7 @@ class MatchScene implements Scene {
       }
       setFont(ctx, LAYOUT.FONT.badge, 'normal');
       ctx.textAlign = 'center';
-      ctx.fillStyle = rgba(PALETTE.creamMist, 0.75);
+      ctx.fillStyle = rgba(PALETTE.forestDeep, 0.8);
       ctx.fillText('点面板外任意处关闭', r.x + r.w / 2, r.y + r.h - 24);
       return;
     }
@@ -1428,7 +1723,7 @@ class MatchScene implements Scene {
     }
     setFont(ctx, LAYOUT.FONT.entry, 'normal');
     ctx.fillStyle = PALETTE.inkSoft;
-    ctx.fillText('卖出可得 ' + sellValue(u.invested) + ' ☀', r.x + 30, r.y + 470);
+    ctx.fillText('卖出可得 ' + sellValue(u.invested) + ' ☀', r.x + 30, r.y + 296);
 
     const onlyRead = b.phase === 'battle' || b.phase === 'observe';
     const labels = ['卸下加成', '卖出 +' + sellValue(u.invested) + '☀', '关闭'];

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.drawScoreboardPanel = exports.easeOutBack = exports.easeOutCubic = exports.bob = exports.roundRectPath = exports.drawVine = exports.paperBase = void 0;
+exports.drawPlateWoodPatch = drawPlateWoodPatch;
 exports.drawWoodPanel = drawWoodPanel;
 exports.drawButton = drawButton;
 exports.drawGear = drawGear;
@@ -43,6 +44,59 @@ var TONES = {
     leaf: { face: palette_1.PALETTE.leafMid, edge: palette_1.PALETTE.forestMid, text: palette_1.PALETTE.creamMist },
     soil: { face: palette_1.PALETTE.soil, edge: palette_1.PALETTE.bark, text: palette_1.PALETTE.inkSoft },
 };
+/**
+ * 用**底板自身的像素**铺一块木底（1:1 取样 + 镜像交替平铺，接缝处像素天然连续）。
+ *
+ * 为什么需要它：底板 `ui-market-wide.jpg` 在五个卡位里烘死了整张样例卡，
+ * 必须盖掉才能画自己的卡；但铺一块程序化 bark 木栏去盖，屏幕上就是
+ * 「木栏压着底板木架」两套 UI 叠在一起。按提示词 0-①「冲突时保留被压着的那一版」，
+ * 这里不再另画一套风格，而是**取底板自己的边缘木纹**补上去——
+ * 补丁与底板同源，玩家读到的仍是同一张木架。
+ *
+ * `strips` 是按顺序拼成一个 tile 的取材条（图像像素坐标，通常取左右两条边缘），
+ * tile 以「正向 → 镜像 → 正向 → …」交替铺满 `dest`：
+ * 镜像后相邻边界是同一列像素，所以看不出拼贴接缝。
+ */
+function drawPlateWoodPatch(ctx, img, dest, strips, anchorX) {
+    if (!img || !strips.length)
+        return;
+    var tileW = 0;
+    for (var i = 0; i < strips.length; i++)
+        tileW += strips[i].w;
+    if (tileW <= 0)
+        return;
+    // 平铺相位锚点：同一片区域分几次补（例如避开圆牌而拆成两块）时传同一个 anchorX，
+    // 接缝两侧的木纹才对得上，不会出现错位的竖纹。
+    var ax = anchorX === undefined ? dest.x : anchorX;
+    var k0 = Math.floor((dest.x - ax) / tileW);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(dest.x, dest.y, dest.w, dest.h);
+    ctx.clip();
+    var n = Math.ceil((dest.x - ax + dest.w) / tileW) + 1;
+    for (var j = 0; j < n; j++) {
+        var k = k0 + j;
+        var dx0 = ax + k * tileW;
+        if (dx0 >= dest.x + dest.w)
+            break;
+        if (dx0 + tileW <= dest.x)
+            continue;
+        ctx.save();
+        ctx.translate(dx0, 0);
+        if (((k % 2) + 2) % 2 === 1) {
+            ctx.translate(tileW, 0);
+            ctx.scale(-1, 1);
+        }
+        var ox = 0;
+        for (var i = 0; i < strips.length; i++) {
+            var s = strips[i];
+            ctx.drawImage(img, s.x, s.y, s.w, s.h, ox, dest.y, s.w, dest.h);
+            ox += s.w;
+        }
+        ctx.restore();
+    }
+    ctx.restore();
+}
 /** 木 / 纸面板。每个面板都带手绘描边，绝不出现硬边矩形。 */
 function drawWoodPanel(ctx, x, y, w, h, opts) {
     var tone = TONES[(opts && opts.tone) || 'bark'] || TONES.bark;

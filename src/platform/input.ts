@@ -20,7 +20,13 @@ export interface InputState {
   y: number;
   downX: number;
   downY: number;
-  downAt: number;
+  /**
+   * 按住时长（ms）。由逻辑帧累加（每帧 + LOGIC_DT），**不使用事件的 timeStamp**：
+   * 宿主 TouchEvent 的 timeStamp 是相对导航时刻的 DOMHighResTimeStamp，而主循环传进来的
+   * 是 Date.now()，两个时钟不同源；一旦 down/up 之间夹进一帧，`now - downAt` 会被算成
+   * 一个巨大的值，长按判定立刻成立 → 点按退化成零距离拖拽、onTap 永不触发。
+   */
+  heldMs: number;
   /** 移动距离阈值：超过即视为滑动（用于滚动战绩面板） */
   moved: boolean;
   /** 长按延迟由 update 判定 */
@@ -28,7 +34,7 @@ export interface InputState {
 }
 
 const state: InputState = {
-  down: false, dragging: false, x: 0, y: 0, downX: 0, downY: 0, downAt: 0,
+  down: false, dragging: false, x: 0, y: 0, downX: 0, downY: 0, heldMs: 0,
   moved: false, longPressFired: false
 };
 
@@ -45,7 +51,9 @@ function emit(e: GestureEvent): void {
 
 /** 每帧调用（传入逻辑时间 ms），负责把「按住不动」升级为 dragStart。 */
 export function updateInput(now: number): void {
-  if (state.down && !state.dragging && !state.longPressFired && now - state.downAt >= TIMING.LONG_PRESS) {
+  if (!state.down || state.dragging || state.longPressFired) return;
+  state.heldMs += TIMING.LOGIC_DT;
+  if (state.heldMs >= TIMING.LONG_PRESS) {
     state.longPressFired = true;
     state.dragging = true;
     emit({ type: 'dragStart', x: state.x, y: state.y, t: now });
@@ -67,7 +75,7 @@ export function bindInput(): void {
   const down = (cssX: number, cssY: number, t: number): void => {
     const p = toLogical(cssX, cssY);
     state.down = true; state.moved = false; state.dragging = false; state.longPressFired = false;
-    state.x = p.x; state.y = p.y; state.downX = p.x; state.downY = p.y; state.downAt = t;
+    state.x = p.x; state.y = p.y; state.downX = p.x; state.downY = p.y; state.heldMs = 0;
     emit({ type: 'down', x: p.x, y: p.y, t });
   };
   const move = (cssX: number, cssY: number, t: number): void => {
@@ -87,10 +95,10 @@ export function bindInput(): void {
   };
   const up = (cssX: number, cssY: number, t: number): void => {
     const p = toLogical(cssX, cssY);
-    const duration = t - state.downAt;
+    const duration = state.heldMs;
     const wasDrag = state.dragging;
     emit({ type: 'up', x: p.x, y: p.y, t, wasDrag, duration });
-    state.down = false; state.dragging = false; state.longPressFired = false;
+    state.down = false; state.dragging = false; state.longPressFired = false; state.heldMs = 0;
   };
 
   WX.onTouchStart((res: TouchEventLike) => {
@@ -109,7 +117,7 @@ export function bindInput(): void {
   if (WX.onTouchCancel) {
     WX.onTouchCancel((res: TouchEventLike) => {
       emit({ type: 'cancel', x: state.x, y: state.y, t: res.timeStamp || nowMs() });
-      state.down = false; state.dragging = false;
+      state.down = false; state.dragging = false; state.heldMs = 0;
     });
   }
   // 开发者工具里也可用鼠标调试

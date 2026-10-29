@@ -12,7 +12,7 @@ import { BuffId, CardKind } from '../config/cards';
 import { WeatherId, WEATHER_COMBOS, weatherDef } from '../config/weather';
 import { blobPath, fillWatercolor, noiseAt, roundRectPath, roundedRectPoints, strokeInk, tracePath, P } from '../ui/brush';
 import { clamp01, cycle } from '../ui/ease';
-import { RADIUS, STROKE, fitSize, setFont, textOutlined, textPlain } from '../ui/theme';
+import { RADIUS, STROKE, fitSize, measure, setFont, textOutlined, textPlain } from '../ui/theme';
 import {
   drawCloud, drawLeaf, drawSunMote, drawVine, paperBase, woodGrain
 } from './paint';
@@ -21,6 +21,16 @@ import { drawSpeciesCreature, drawSpeciesSilhouette } from './unit';
 import { weatherTint } from './forest';
 
 const TAU = Math.PI * 2;
+
+/**
+ * 名称木牌的统一参考文本（提示词 P2-⑱「卡牌标题木牌字号统一」）。
+ *
+ * 卡名长度差异极大：物种名只有 1 个字（象/狮/虎…），天气名是 6 个字（晴 · 林间光），
+ * 卡牌名 4 个字（锋锐之爪）。若逐张用 `fitSize(card.cn, …)`，短名会顶格画到 28px、
+ * 长名被压到 20px，同一排卡片的标题大小参差不齐。
+ * 这里固定用“常规名里最宽的一条”当参考来定字号，所有标题就都一样大了。
+ */
+const CARD_NAME_REF = '晴 · 林间光';
 
 export interface CardView {
   kind: CardKind;
@@ -43,6 +53,13 @@ export interface CardView {
 export interface CardDrawOpts {
   time?: number;
   scale?: number;
+  /**
+   * 显式卡面宽高（px）。用于集市卡位：那里要把卡牌铺满**底板烘死的样例卡位置**
+   * （176..549，比例 0.53 ≠ 卡面原生 0.724），所以不能只给一个等比 `scale`。
+   * 省略时仍用 LAYOUT.CARD 的 168×232。
+   */
+  w?: number;
+  h?: number;
   affordable?: boolean;
   pressed?: boolean;
   drag?: boolean;
@@ -510,12 +527,21 @@ function drawWeatherCardFace(
   time: number,
 ): void {
   const u = w / LAYOUT.CARD.w;
+  /**
+   * 纵向单位：**与横向单位分开**。
+   *
+   * 集市卡位要把卡牌铺满底板烘死的样例卡（176..549，高 373），而卡面原生高 232，
+   * 于是 h ≠ LAYOUT.CARD.h。所有「y + K」的排版必须跟 h 一起放大（v = h/232），
+   * 否则美术区、名称木牌、两行效果会全部挤在卡片上半部、下半张只剩空白木底。
+   * 字号仍按 u（宽度单位）算，避免文字被纵向拉长。
+   */
+  const v = h / LAYOUT.CARD.h;
   const affordable = o.affordable === undefined ? true : o.affordable;
   const radius = LAYOUT.CARD.radius * u;
   const artX = x + 8 * u;
-  const artY = y + 8 * u;
+  const artY = y + 8 * v;
   const artW = w - 16 * u;
-  const artH = 142 * u;
+  const artH = 142 * v;
 
   // 木框底
   paperBase(ctx, x, y, w, h, PALETTE.barkLight, 0.98, seed);
@@ -539,27 +565,53 @@ function drawWeatherCardFace(
   strokeInk(ctx, artPts, { width: 2.4 * u, close: true, seedIndex: seed + 3, jitter: 0.9 });
 
   // 费用太阳牌
-  drawCostCoin(ctx, x + 26 * u, y + 28 * u, 21 * u, card.cost, time, o.pressed === true && !affordable);
+  drawCostCoin(ctx, x + 26 * u, y + 28 * v, 21 * u, card.cost, time, o.pressed === true && !affordable);
 
   // 名称木牌
   const nameX = x + 14 * u;
-  const nameY = y + 154 * u;
+  const nameY = y + 154 * v;
   const nameW = w - 28 * u;
   const nameH = 26 * u;
   const nameBar: P[] = rectPts(nameX, nameY, nameW, nameH);
   fillWatercolor(ctx, nameBar, PALETTE.barkLight, { alpha: 0.98, layers: 1, wetEdge: true, seedIndex: seed + 30 });
   woodGrain(ctx, nameX, nameY, nameW, nameH, seed + 31);
   strokeInk(ctx, nameBar, { width: 2.6 * u, close: true, seedIndex: seed + 32, jitter: 0.9 });
-  const nameSize = fitSize(ctx, card.cn, nameW - 22 * u, LAYOUT.FONT.cardName, LAYOUT.FONT.badge);
-  textPlain(ctx, card.cn, x + w / 2, nameY + nameH * 0.74, nameSize, PALETTE.inkSoft, 'center');
+  // 名称木牌（字号统一，提示词 P2-⑱）：
+  // 原实现是 fitSize(card.cn, ...)，于是「象」这种单字物种按 28px 顶格画，
+  // 「晴 · 林间光」这类长名被逐级缩小，同一排卡片的标题字号参差不齐。
+  // 改为**用同一条参考文本测一次字号**：参考文本取常规最宽的一条（天气名是 6 字），
+  // 所有标题都按它决定的大小绘制，于是并排的卡牌标题字号完全一致；
+  // 只有极端的组合天气名（如「晴 · 林间光 / 雨 · 骤雨」）才继续单独缩小。
+  // 统一字号：常规名一律按参考宽度定字号；只有比参考还宽的极端名（组合天气）
+  // 才在该字号基础上再缩一档，避免溢出木牌。
+  const nameBudget = nameW - 22 * u;
+  const nameSize = fitSize(ctx, CARD_NAME_REF, nameBudget, LAYOUT.FONT.cardName, LAYOUT.FONT.badge);
+  const drawSize = measure(ctx, card.cn, nameSize, 'bold') > nameBudget
+    ? fitSize(ctx, card.cn, nameBudget, nameSize, LAYOUT.FONT.badge)
+    : nameSize;
+  textPlain(ctx, card.cn, x + w / 2, nameY + nameH * 0.74, drawSize, PALETTE.inkSoft, 'center');
 
-  // 两行效果（实时取自配置）——基线写死，保证无论缩放都不出卡
+  // 三段式信息（提示词 P2-⑯）：图标（美术区）→ 标题（名称木牌）→ 效果（两行），
+  // 三者必须完整可见。原文案基线写死在 y+203u / y+224u，而卡高 232，
+  // 第二行几乎压在卡底描边上、还会被木框的下沿吃掉；这里上移并留出底部边距，
+  // 让两行效果稳定落在卡内、且与名称木牌（y+154u..180u）之间不挤。
   const lines = weatherLines(card);
   const fsize = Math.max(11, Math.round(16.5 * u));
+  const lineY1 = y + 198 * v;
+  const lineY2 = y + 219 * v;
+  // 红字（莓红）压在木纹上对比度不够（提示词 P2-⑰）：给敌方那一行垫一条
+  // 半透明奶油底条，字号也用不小于卡牌其他数据文字的尺寸。
+  const padX = 11 * u;
+  const padH = 20 * u;
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  fillWatercolor(ctx, rectPts(x + padX, lineY2 - padH * 0.72, w - padX * 2, padH),
+    PALETTE.creamMist, { alpha: 0.9, layers: 1, seedIndex: seed + 41 });
+  ctx.restore();
   const s1 = fitSize(ctx, lines[0], w - 30 * u, fsize, 10);
-  textPlain(ctx, lines[0], x + 15 * u, y + 203 * u, s1, PALETTE.forestMid, 'left');
+  textPlain(ctx, lines[0], x + 15 * u, lineY1, s1, PALETTE.forestMid, 'left');
   const s2 = fitSize(ctx, lines[1], w - 30 * u, fsize, 10);
-  textPlain(ctx, lines[1], x + 15 * u, y + 224 * u, s2, PALETTE.berry, 'left');
+  textPlain(ctx, lines[1], x + 15 * u, lineY2, s2, PALETTE.berry, 'left');
 
   // 不可购买：灰雾 + 红框闪
   if (!affordable) {
@@ -590,8 +642,8 @@ export function drawCard(
   const time = o.time === undefined ? 0 : o.time;
   const scale = o.scale === undefined ? 1 : o.scale;
   const alpha = o.alpha === undefined ? 1 : o.alpha;
-  const w = LAYOUT.CARD.w;
-  const h = LAYOUT.CARD.h;
+  const w = o.w === undefined ? LAYOUT.CARD.w : o.w;
+  const h = o.h === undefined ? LAYOUT.CARD.h : o.h;
   const r = LAYOUT.CARD.radius;
   const affordable = o.affordable === undefined ? true : o.affordable;
   const seed = (card.species ? card.species.length : 1) * 17 + (card.cost * 7) + (card.cn.length * 3);
